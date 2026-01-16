@@ -5,6 +5,8 @@ using System.IO;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using TeamGearPlanning.Windows;
+using TeamGearPlanning.Models;
+using TeamGearPlanning.Helpers;
 
 namespace TeamGearPlanning;
 
@@ -22,16 +24,32 @@ public sealed class Plugin : IDalamudPlugin
     public readonly WindowSystem WindowSystem = new("TeamGearPlanning");
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
+    private SetupWindow SetupWindow { get; init; }
 
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
+        // Create sample team if this is first launch
+        bool isFirstLaunch = Configuration.RaidTeams.Count == 0;
+        if (isFirstLaunch)
+        {
+            CreateSampleTeam();
+        }
+
         ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);
+        SetupWindow = new SetupWindow(this);
 
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);
+        WindowSystem.AddWindow(SetupWindow);
+
+        // Show setup window on first launch
+        if (isFirstLaunch)
+        {
+            SetupWindow.IsOpen = true;
+        }
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -62,6 +80,7 @@ public sealed class Plugin : IDalamudPlugin
 
         ConfigWindow.Dispose();
         MainWindow.Dispose();
+        SetupWindow.Dispose();
 
         CommandManager.RemoveHandler(CommandName);
     }
@@ -89,4 +108,66 @@ public sealed class Plugin : IDalamudPlugin
     
     public void ToggleConfigUi() => ConfigWindow.Toggle();
     public void ToggleMainUi() => MainWindow.Toggle();
+
+    private void CreateSampleTeam()
+    {
+        var sampleTeam = new RaidTeam("Sample Raid Team");
+        sampleTeam.Description = "Edit this team to get started! Change names, jobs, and track gear progression.";
+        
+        // Create 8 sample members: 2 tanks, 2 healers, 2 melee dps, 1 ranged dps, 1 caster dps
+        var memberConfigs = new (string name, string job, JobRole role)[]
+        {
+            ("Tank 1", "Tank", JobRole.Tank),
+            ("Tank 2", "Tank", JobRole.Tank),
+            ("Healer 1", "Healer", JobRole.Healer),
+            ("Healer 2", "Healer", JobRole.Healer),
+            ("Melee 1", "Melee", JobRole.MeleeDPS),
+            ("Melee 2", "Melee", JobRole.MeleeDPS),
+            ("Ranged", "Ranged", JobRole.RangedDPS),
+            ("Caster", "Caster", JobRole.MagicDPS)
+        };
+
+        foreach (var config in memberConfigs)
+        {
+            var member = new RaidMember(config.name, config.job, config.role);
+            
+            // Initialize all gear slots with desired source defaults
+            member.InitializeGear();
+            foreach (var gear in member.Gear.Values)
+            {
+                gear.DesiredStatus = GearStatus.BiS;
+                // Start current status as low ilvl
+                gear.CurrentStatus = GearStatus.LowIlvl;
+                
+                // Default current gear (Source) to None
+                gear.Source = GearSource.None;
+                
+                // Set specific desired source defaults
+                if (gear.Slot == GearSlot.MainHand)
+                {
+                    gear.DesiredSource = GearSource.Savage;
+                }
+                else if (gear.Slot == GearSlot.Ring1)
+                {
+                    gear.DesiredSource = GearSource.TomeUp;
+                }
+                else if (gear.Slot == GearSlot.Ring2)
+                {
+                    gear.DesiredSource = GearSource.Savage;
+                }
+                else
+                {
+                    gear.DesiredSource = GearSource.None;
+                }
+            }
+            
+            sampleTeam.AddMember(member);
+        }
+
+        Configuration.RaidTeams.Add(sampleTeam);
+        Configuration.SelectedTeamIndex = 0;
+        Configuration.Save();
+        
+        Log.Information("===Sample team created. Edit team members in the config window to get started!===");
+    }
 }

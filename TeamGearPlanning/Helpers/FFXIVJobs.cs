@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace TeamGearPlanning.Helpers;
 
 public static class FFXIVJobs
@@ -35,6 +37,49 @@ public static class FFXIVJobs
         "Red Mage",
         "Blue Mage"
     };
+
+    // Job abbreviations
+    private static readonly Dictionary<string, string> JobAbbreviations = new()
+    {
+        { "Paladin", "PLD" },
+        { "Warrior", "WAR" },
+        { "Dark Knight", "DRK" },
+        { "Gunbreaker", "GNB" },
+        { "White Mage", "WHM" },
+        { "Scholar", "SCH" },
+        { "Astrologian", "AST" },
+        { "Sage", "SGE" },
+        { "Dragoon", "DRG" },
+        { "Monk", "MNK" },
+        { "Ninja", "NIN" },
+        { "Samurai", "SAM" },
+        { "Reaper", "RPR" },
+        { "Viper", "VPR" },
+        { "Bard", "BRD" },
+        { "Machinist", "MCH" },
+        { "Dancer", "DNC" },
+        { "Black Mage", "BLM" },
+        { "Summoner", "SMN" },
+        { "Red Mage", "RDM" },
+        { "Blue Mage", "BLU" }
+    };
+
+    public static string[] GetAllJobOptions()
+    {
+        var options = new List<string> { "Tank", "Healer", "Melee", "Ranged", "Caster" };
+        options.AddRange(AllJobs);
+        return options.ToArray();
+    }
+
+    public static string GetJobDisplayName(string jobOrRole)
+    {
+        // For generic roles, return as-is
+        if (jobOrRole is "Tank" or "Healer" or "Melee" or "Ranged" or "Caster")
+            return jobOrRole;
+        
+        // For FFXIV jobs, return abbreviation
+        return JobAbbreviations.TryGetValue(jobOrRole, out var abbr) ? abbr : jobOrRole;
+    }
 
     public static Models.JobRole GetRoleForJob(string job)
     {

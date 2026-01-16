@@ -89,7 +89,15 @@ public class ConfigWindow : Window, IDisposable
             {
                 var team = configuration.RaidTeams[configuration.SelectedTeamIndex];
 
-                ImGui.TextColored(new Vector4(0.2f, 0.8f, 0.2f, 1.0f), $"Team: {team.Name}");
+                ImGui.TextColored(new Vector4(0.2f, 0.8f, 0.2f, 1.0f), "Team Name:");
+                ImGui.SameLine();
+                string teamName = team.Name;
+                ImGui.SetNextItemWidth(200);
+                if (ImGui.InputText("##TeamName", ref teamName, 100, ImGuiInputTextFlags.EnterReturnsTrue))
+                {
+                    team.Name = teamName;
+                    configuration.Save();
+                }
                 ImGui.Text($"Members: {team.Members.Count}/{MaxTeamSize}");
 
                 if (ImGui.Button("Delete Team##DeleteTeamBtn", new Vector2(100, 0)))
