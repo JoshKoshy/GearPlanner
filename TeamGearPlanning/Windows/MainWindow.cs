@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
+using System.Linq;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -33,7 +35,7 @@ public class MainWindow : Window, IDisposable
         // Header
         ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Team Gear Planning");
         ImGui.SameLine();
-        if (ImGui.Button("⚙ Config", new Vector2(80, 0)))
+        if (ImGui.Button("Settings", new Vector2(80, 0)))
         {
             plugin.ToggleConfigUi();
         }
@@ -59,7 +61,7 @@ public class MainWindow : Window, IDisposable
         var team = plugin.Configuration.RaidTeams[selectedTeamIndex];
 
         // Team info header with editable team name
-        ImGui.TextColored(new Vector4(0.2f, 0.8f, 0.2f, 1.0f), "📋");
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Team:");
         ImGui.SameLine();
         string teamName = team.Name;
         ImGui.SetNextItemWidth(150);
@@ -68,19 +70,20 @@ public class MainWindow : Window, IDisposable
             team.Name = teamName;
             plugin.Configuration.Save();
         }
-        ImGui.SameLine(200);
-        ImGui.Text($"Members: {team.Members.Count}/8");
-        ImGui.SameLine(350);
-        ImGui.Text($"Team Avg: {team.GetTeamAverageGearLevel()}%");
-        ImGui.SameLine(500);
-        ImGui.TextColored(new Vector4(1.0f, 0.5f, 0.0f, 1.0f), $"⚠ Incomplete: {team.GetMembersMissingBiS()}");
+        // ImGui.SameLine(200);
+        // ImGui.Text($"Members: {team.Members.Count}/8");
+        // ImGui.SameLine(350);
+        // ImGui.Text($"Team Avg: {team.GetTeamAverageGearLevel()}%");
+        // ImGui.SameLine(500);
+        // ImGui.TextColored(new Vector4(1.0f, 0.5f, 0.0f, 1.0f), $"⚠ Incomplete: {team.GetMembersMissingBiS()}");
 
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
 
-        // Gear grid table
-        DrawGearTable(team);
+        // Display all members in sections as desired
+        // Example: Draw all members together, or split by custom logic
+        DrawMemberSection(team.Members, team);
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -111,212 +114,307 @@ public class MainWindow : Window, IDisposable
         ImGui.Text("= BiS");
     }
 
-    private void DrawGearTable(Models.RaidTeam team)
+    private void DrawMemberSection(List<Models.RaidMember> members, Models.RaidTeam team)
     {
-        var gearSlots = System.Enum.GetNames(typeof(Models.GearSlot));
-        int columnCount = (team.Members.Count * 2) + 1; // +1 for slot name column, 2 per member (current and desired)
-
-        if (ImGui.BeginTable("GearGrid", columnCount, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+        const int maxPerRow = 4;
+        int rowCount = (int)Math.Ceiling(members.Count / (float)maxPerRow);
+        
+        for (int rowIdx = 0; rowIdx < rowCount; rowIdx++)
         {
-            // Setup columns with two columns per member
+            var rowMembers = members.Skip(rowIdx * maxPerRow).Take(maxPerRow).ToList();
+            
+            if (ImGui.BeginChild($"Section_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", 
+                new Vector2(rowMembers.Count * 355 + (rowMembers.Count - 1) * 5, 565), false))
+            {
+                ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(5, 5));
+                ImGui.Columns(rowMembers.Count, $"SectionColumns_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", false);
+                
+                for (int i = 0; i < rowMembers.Count; i++)
+                {
+                    var memberIdx = team.Members.IndexOf(rowMembers[i]);
+                    DrawMemberSection(team, memberIdx);
+                    ImGui.NextColumn();
+                }
+                
+                ImGui.Columns(1);
+                ImGui.PopStyleVar();
+                ImGui.EndChild();
+            }
+            
+            if (rowIdx < rowCount - 1)
+            {
+                ImGui.Spacing();
+                ImGui.Spacing();
+            }
+        }
+    }
+
+    private void DrawMemberSection(Models.RaidTeam team, int memberIdx)
+    {
+        var member = team.Members[memberIdx];
+        
+        // Constrain to a max width and height
+        if (ImGui.BeginChild($"MemberSection{memberIdx}", new System.Numerics.Vector2(350, 565), true))
+        {
+            // Member name - editable
+            string name = member.Name;
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.InputText($"##CharName{memberIdx}", ref name, 50, ImGuiInputTextFlags.EnterReturnsTrue))
+            {
+                member.Name = name;
+                plugin.Configuration.Save();
+            }
+            
+            // Job dropdown
+            int currentJobIdx = System.Array.IndexOf(jobOptions, member.Job);
+            if (currentJobIdx < 0) currentJobIdx = 0;
+            
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.Combo($"##Job{memberIdx}", ref currentJobIdx, jobOptions))
+            {
+                member.Job = jobOptions[currentJobIdx];
+                var role = Helpers.FFXIVJobs.GetRoleForJob(member.Job);
+                if (role != Models.JobRole.Unknown)
+                {
+                    member.Role = role;
+                }
+                plugin.Configuration.Save();
+            }
+            
+            ImGui.Spacing();
+            
+            DrawGearTableForMember(team, memberIdx);
+            
+            ImGui.Spacing();
+            
+            DrawCurrencyRowForMember(team, memberIdx);
+            
+            ImGui.Spacing();
+            
+            DrawMaterialsTableForMember(team, memberIdx);
+            
+            ImGui.EndChild();
+        }
+    }
+
+    private void DrawGearTableForMember(Models.RaidTeam team, int memberIdx)
+    {
+        var member = team.Members[memberIdx];
+        var gearSlots = System.Enum.GetNames(typeof(Models.GearSlot));
+
+        if (ImGui.BeginTable($"GearGrid{memberIdx}", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+        {
+            // Setup columns: Slot, Desired, Current
             ImGui.TableSetupColumn("Slot", ImGuiTableColumnFlags.WidthFixed, 140);
-            
-            foreach (var member in team.Members)
-            {
-                ImGui.TableSetupColumn($"{member.Name} (C)", ImGuiTableColumnFlags.WidthFixed, 65);
-                ImGui.TableSetupColumn($"{member.Name} (D)", ImGuiTableColumnFlags.WidthFixed, 65);
-            }
+            ImGui.TableSetupColumn("Desired", ImGuiTableColumnFlags.WidthFixed, 65);
+            ImGui.TableSetupColumn("Current", ImGuiTableColumnFlags.WidthFixed, 65);
 
-            // Custom header row with editable character names
-            ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
-            ImGui.TableSetColumnIndex(0);
-            ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1.0f), "Slot");
-            
-            for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
-            {
-                var member = team.Members[memberIdx];
-                
-                // Current column
-                ImGui.TableSetColumnIndex((memberIdx * 2) + 1);
-                string name = member.Name;
-                ImGui.SetNextItemWidth(180); // Span both columns
-                if (ImGui.InputText($"##CharName{memberIdx}", ref name, 50, ImGuiInputTextFlags.EnterReturnsTrue))
-                {
-                    member.Name = name;
-                    plugin.Configuration.Save();
-                }
-                
-                // Desired column - merge with current for spanning
-                ImGui.TableSetColumnIndex((memberIdx * 2) + 2);
-                // Empty - just for layout
-            }
-
-            // Job row - showing member job/role
-            ImGui.TableNextRow();
-            ImGui.TableSetColumnIndex(0);
-            ImGui.TextColored(new Vector4(0.6f, 0.6f, 0.6f, 1.0f), "Job");
-            
-            for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
-            {
-                ImGui.TableSetColumnIndex((memberIdx * 2) + 1);
-                var member = team.Members[memberIdx];
-                
-                // Job dropdown with full job names - spans across columns
-                int currentJobIdx = System.Array.IndexOf(jobOptions, member.Job);
-                if (currentJobIdx < 0) currentJobIdx = 0;
-                
-                ImGui.SetNextItemWidth(180); // Span both columns
-                if (ImGui.Combo($"##Job{memberIdx}", ref currentJobIdx, jobOptions))
-                {
-                    member.Job = jobOptions[currentJobIdx];
-                    var role = Helpers.FFXIVJobs.GetRoleForJob(member.Job);
-                    if (role != Models.JobRole.Unknown)
-                    {
-                        member.Role = role;
-                    }
-                    plugin.Configuration.Save();
-                }
-                
-                // Desired column - empty for job row to allow spanning
-                ImGui.TableSetColumnIndex((memberIdx * 2) + 2);
-                // Empty for layout
-            }
-
-            // Column labels row for Desired/Current gear
-            ImGui.TableNextRow();
-            ImGui.TableSetColumnIndex(0);
-            // Empty for slot column
-            
-            for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
-            {
-                // Desired gear label
-                ImGui.TableSetColumnIndex((memberIdx * 2) + 1);
-                ImGui.TextDisabled("Desired");
-                
-                // Current gear label
-                ImGui.TableSetColumnIndex((memberIdx * 2) + 2);
-                ImGui.TextDisabled("Current");
-            }
+            // Header row
+            ImGui.TableHeadersRow();
 
             // Data rows - one for each gear slot
             foreach (var slotName in gearSlots)
             {
-                ImGui.TableNextRow();
+                ImGui.TableNextRow(ImGuiTableRowFlags.None, 25);
 
                 // Gear Slot column
                 ImGui.TableSetColumnIndex(0);
                 ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.8f, 1.0f), slotName);
 
-                // Member gear status columns (two per member)
-                for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
+                // Desired gear column
+                if (member.Gear.TryGetValue(slotName, out var piece))
                 {
-                    var member = team.Members[memberIdx];
-                    if (member.Gear.TryGetValue(slotName, out var piece))
+                    var desiredColor = new Vector4(1.0f, 1.0f, 1.0f, 1.0f); // Default white
+                    var currentColor = GetSourceColor(piece.Source);
+                    
+                    // Check if desired source matches current source - use purple if so
+                    if (piece.DesiredSource != Models.GearSource.None && piece.Source == piece.DesiredSource)
                     {
-                        var currentStatus = piece.CurrentStatus;
-                        var desiredStatus = piece.DesiredStatus;
-                        var desiredColor = GetStatusColor(desiredStatus);
-                        
-                        // Get color for current gear based on source
-                        var currentColor = GetSourceColor(piece.Source);
-                        
-                        // Check if current source matches desired and is Savage or TomeUp - use purple if so
-                        if (piece.Source == piece.DesiredSource && 
-                            (piece.Source == Models.GearSource.Savage || piece.Source == Models.GearSource.TomeUp))
-                        {
-                            currentColor = new Vector4(0.8f, 0.0f, 1.0f, 1.0f); // Purple
-                        }
-                        
-                        // Desired gear column
-                        ImGui.TableSetColumnIndex((memberIdx * 2) + 1);
-                        string desiredSourceDisplay = piece.DesiredSource.ToString() == "None" ? "" : piece.DesiredSource.ToString();
-                        ImGui.TextColored(desiredColor, desiredSourceDisplay);
-                        
-                        // Make empty cells clickable with invisible button
-                        if (desiredSourceDisplay == "")
-                        {
-                            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - ImGui.GetTextLineHeight());
-                            if (ImGui.InvisibleButton($"DesiredGear{memberIdx}_{slotName}", new System.Numerics.Vector2(-1, ImGui.GetTextLineHeight())))
-                            {
-                                ImGui.OpenPopup($"StatusMenu{memberIdx}_{slotName}");
-                            }
-                        }
-                        else if (ImGui.IsItemClicked())
+                        desiredColor = new Vector4(0.8f, 0.0f, 1.0f, 1.0f); // Purple
+                    }
+                    
+                    // Check if current source matches desired - use purple if so
+                    if (piece.Source == piece.DesiredSource && piece.Source != Models.GearSource.None)
+                    {
+                        currentColor = new Vector4(0.8f, 0.0f, 1.0f, 1.0f); // Purple
+                    }
+                    
+                    ImGui.TableSetColumnIndex(1);
+                    string desiredSourceDisplay = piece.DesiredSource.ToString() == "None" ? "" : piece.DesiredSource.ToString();
+                    ImGui.TextColored(desiredColor, desiredSourceDisplay);
+                    
+                    // Make empty cells clickable with invisible button
+                    if (desiredSourceDisplay == "")
+                    {
+                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - ImGui.GetTextLineHeight());
+                        if (ImGui.InvisibleButton($"DesiredGear{memberIdx}_{slotName}", new System.Numerics.Vector2(-1, ImGui.GetTextLineHeight())))
                         {
                             ImGui.OpenPopup($"StatusMenu{memberIdx}_{slotName}");
                         }
-                        
-                        // Tooltip for desired
-                        if (ImGui.IsItemHovered())
-                        {
-                            ImGui.SetTooltip($"{piece.DesiredSource}");
-                        }
-                        
-                        // Current gear column
-                        ImGui.TableSetColumnIndex((memberIdx * 2) + 2);
-                        string sourceDisplay = piece.Source.ToString() == "None" ? "" : piece.Source.ToString();
-                        ImGui.TextColored(currentColor, sourceDisplay);
-                        
-                        // Make empty cells clickable with invisible button
-                        if (sourceDisplay == "")
-                        {
-                            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - ImGui.GetTextLineHeight());
-                            if (ImGui.InvisibleButton($"CurrentGear{memberIdx}_{slotName}", new System.Numerics.Vector2(-1, ImGui.GetTextLineHeight())))
-                            {
-                                ImGui.OpenPopup($"SourceMenu{memberIdx}_{slotName}");
-                            }
-                        }
-                        else if (ImGui.IsItemClicked())
+                    }
+                    else if (ImGui.IsItemClicked())
+                    {
+                        ImGui.OpenPopup($"StatusMenu{memberIdx}_{slotName}");
+                    }
+                    
+                    // Tooltip for desired
+                    if (ImGui.IsItemHovered())
+                    {
+                        ImGui.SetTooltip($"{piece.DesiredSource}");
+                    }
+                    
+                    // Current gear column
+                    ImGui.TableSetColumnIndex(2);
+                    string sourceDisplay = piece.Source.ToString() == "None" ? "" : piece.Source.ToString();
+                    ImGui.TextColored(currentColor, sourceDisplay);
+                    
+                    // Make empty cells clickable with invisible button
+                    if (sourceDisplay == "")
+                    {
+                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - ImGui.GetTextLineHeight());
+                        if (ImGui.InvisibleButton($"CurrentGear{memberIdx}_{slotName}", new System.Numerics.Vector2(-1, ImGui.GetTextLineHeight())))
                         {
                             ImGui.OpenPopup($"SourceMenu{memberIdx}_{slotName}");
                         }
+                    }
+                    else if (ImGui.IsItemClicked())
+                    {
+                        ImGui.OpenPopup($"SourceMenu{memberIdx}_{slotName}");
+                    }
+                    
+                    // Tooltip showing full info
+                    if (ImGui.IsItemHovered())
+                    {
+                        ImGui.SetTooltip($"{piece.Source} | {piece.CurrentStatus}");
+                    }
+                    
+                    // Right-click menu for source
+                    if (ImGui.BeginPopup($"SourceMenu{memberIdx}_{slotName}"))
+                    {
+                        ImGui.TextDisabled("Gear Source:");
+                        ImGui.Separator();
                         
-                        // Tooltip showing full info
-                        if (ImGui.IsItemHovered())
+                        foreach (var sourceOption in gearSourceOptions)
                         {
-                            ImGui.SetTooltip($"{piece.Source} | {currentStatus}");
-                        }
-                        
-                        // Right-click menu for source
-                        if (ImGui.BeginPopup($"SourceMenu{memberIdx}_{slotName}"))
-                        {
-                            ImGui.TextDisabled("Gear Source:");
-                            ImGui.Separator();
-                            
-                            foreach (var sourceOption in gearSourceOptions)
+                            var sourceEnumValue = sourceOption.Replace(" ", "");
+                            if (ImGui.MenuItem(sourceOption, "", piece.Source.ToString() == sourceEnumValue))
                             {
-                                var sourceEnumValue = sourceOption.Replace(" ", "");
-                                if (ImGui.MenuItem(sourceOption, "", piece.Source.ToString() == sourceEnumValue))
-                                {
-                                    piece.Source = System.Enum.Parse<GearSource>(sourceEnumValue);
-                                    plugin.Configuration.Save();
-                                }
+                                piece.Source = System.Enum.Parse<GearSource>(sourceEnumValue);
+                                plugin.Configuration.Save();
                             }
-                            
-                            ImGui.EndPopup();
                         }
                         
-                        // Menu for desired source
-                        if (ImGui.BeginPopup($"StatusMenu{memberIdx}_{slotName}"))
+                        ImGui.EndPopup();
+                    }
+                    
+                    // Menu for desired source
+                    if (ImGui.BeginPopup($"StatusMenu{memberIdx}_{slotName}"))
+                    {
+                        ImGui.TextDisabled("Desired Source:");
+                        ImGui.Separator();
+                        
+                        foreach (var sourceOption in gearSourceOptions)
                         {
-                            ImGui.TextDisabled("Desired Source:");
-                            ImGui.Separator();
-                            
-                            foreach (var sourceOption in gearSourceOptions)
+                            var sourceEnumValue = sourceOption.Replace(" ", "");
+                            if (ImGui.MenuItem(sourceOption, "", piece.DesiredSource.ToString() == sourceEnumValue))
                             {
-                                var sourceEnumValue = sourceOption.Replace(" ", "");
-                                if (ImGui.MenuItem(sourceOption, "", piece.DesiredSource.ToString() == sourceEnumValue))
-                                {
-                                    piece.DesiredSource = System.Enum.Parse<GearSource>(sourceEnumValue);
-                                    plugin.Configuration.Save();
-                                }
+                                piece.DesiredSource = System.Enum.Parse<GearSource>(sourceEnumValue);
+                                plugin.Configuration.Save();
                             }
-                            
-                            ImGui.EndPopup();
                         }
+                        
+                        ImGui.EndPopup();
                     }
                 }
             }
+
+            ImGui.EndTable();
+        }
+    }
+
+    private void DrawCurrencyRowForMember(Models.RaidTeam team, int memberIdx)
+    {
+        var member = team.Members[memberIdx];
+
+        if (ImGui.BeginTable($"CurrencyTable{memberIdx}", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+        {
+            // Setup columns
+            ImGui.TableSetupColumn("Currency", ImGuiTableColumnFlags.WidthFixed, 100);
+            ImGui.TableSetupColumn("Floor 1", ImGuiTableColumnFlags.WidthFixed, 45);
+            ImGui.TableSetupColumn("Floor 2", ImGuiTableColumnFlags.WidthFixed, 45);
+            ImGui.TableSetupColumn("Floor 3", ImGuiTableColumnFlags.WidthFixed, 45);
+            ImGui.TableSetupColumn("Floor 4", ImGuiTableColumnFlags.WidthFixed, 45);
+
+            // Header row
+            ImGui.TableHeadersRow();
+
+            // Pages row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Pages");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                ImGui.Text("0"); // Placeholder - add data tracking per floor as needed
+            }
+
+            // Pages Needed row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Pages Needed");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                ImGui.Text("4"); // Placeholder - calculate based on pages earned per floor
+            }
+
+            // Page Adjust row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Page Adjust");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                ImGui.SetNextItemWidth(35);
+                int adjustValue = 0; // Placeholder - add data tracking to model
+                if (ImGui.InputInt($"##PageAdjust{memberIdx}_{floor}", ref adjustValue))
+                {
+                    // Update member data when changed
+                }
+            }
+
+            ImGui.EndTable();
+        }
+    }
+
+    private void DrawMaterialsTableForMember(Models.RaidTeam team, int memberIdx)
+    {
+        var member = team.Members[memberIdx];
+
+        if (ImGui.BeginTable($"MaterialsTable{memberIdx}", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+        {
+            // Setup columns
+            ImGui.TableSetupColumn("Materials", ImGuiTableColumnFlags.WidthFixed, 140);
+            ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 130);
+
+            // Header row
+            ImGui.TableHeadersRow();
+
+            // Glazes Needed row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Glazes Needed");
+            ImGui.TableSetColumnIndex(1);
+            int glazesNeeded = (4 - member.PagesEarned) * 4;
+            ImGui.Text(glazesNeeded.ToString());
+
+            // Twines Needed row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Twines Needed");
+            ImGui.TableSetColumnIndex(1);
+            int twinesNeeded = (4 - member.PagesEarned) * 8;
+            ImGui.Text(twinesNeeded.ToString());
 
             ImGui.EndTable();
         }
