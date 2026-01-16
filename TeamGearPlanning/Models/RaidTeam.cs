@@ -12,6 +12,10 @@ public class RaidTeam
     public List<RaidMember> Members { get; set; } = new();
     public DateTime CreatedDate { get; set; } = DateTime.Now;
     public int TierNumber { get; set; } = 0; // Arcadion tier 1-4
+    public int Floor1Clears { get; set; } = 0;
+    public int Floor2Clears { get; set; } = 0;
+    public int Floor3Clears { get; set; } = 0;
+    public int Floor4Clears { get; set; } = 0;
     
     public RaidTeam() { }
     

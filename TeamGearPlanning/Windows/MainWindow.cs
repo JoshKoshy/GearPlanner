@@ -60,30 +60,76 @@ public class MainWindow : Window, IDisposable
 
         var team = plugin.Configuration.RaidTeams[selectedTeamIndex];
 
-        // Team info header with editable team name
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // Use columns to layout team info on left and member tables on right
+        ImGui.Columns(2, "TeamLayout", false);
+        ImGui.SetColumnWidth(0, 200);
+
+        // Left column - Team info
         ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Team:");
-        ImGui.SameLine();
+        ImGui.SameLine(0, 5);
         string teamName = team.Name;
-        ImGui.SetNextItemWidth(150);
+        ImGui.SetNextItemWidth(130);
         if (ImGui.InputText("##TeamName", ref teamName, 100, ImGuiInputTextFlags.EnterReturnsTrue))
         {
             team.Name = teamName;
             plugin.Configuration.Save();
         }
-        // ImGui.SameLine(200);
-        // ImGui.Text($"Members: {team.Members.Count}/8");
-        // ImGui.SameLine(350);
-        // ImGui.Text($"Team Avg: {team.GetTeamAverageGearLevel()}%");
-        // ImGui.SameLine(500);
-        // ImGui.TextColored(new Vector4(1.0f, 0.5f, 0.0f, 1.0f), $"⚠ Incomplete: {team.GetMembersMissingBiS()}");
 
         ImGui.Spacing();
-        ImGui.Separator();
         ImGui.Spacing();
 
-        // Display all members in sections as desired
-        // Example: Draw all members together, or split by custom logic
+        // Floor clears section
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
+        ImGui.Text("Floor 1:");
+        ImGui.SameLine(80);
+        ImGui.SetNextItemWidth(80);
+        int floor1Clears = team.Floor1Clears;
+        if (ImGui.InputInt("##Floor1Clears", ref floor1Clears, 1, 5))
+        {
+            team.Floor1Clears = floor1Clears;
+            plugin.Configuration.Save();
+        }
+
+        ImGui.Text("Floor 2:");
+        ImGui.SameLine(80);
+        ImGui.SetNextItemWidth(80);
+        int floor2Clears = team.Floor2Clears;
+        if (ImGui.InputInt("##Floor2Clears", ref floor2Clears, 1, 5))
+        {
+            team.Floor2Clears = floor2Clears;
+            plugin.Configuration.Save();
+        }
+
+        ImGui.Text("Floor 3:");
+        ImGui.SameLine(80);
+        ImGui.SetNextItemWidth(80);
+        int floor3Clears = team.Floor3Clears;
+        if (ImGui.InputInt("##Floor3Clears", ref floor3Clears, 1, 5))
+        {
+            team.Floor3Clears = floor3Clears;
+            plugin.Configuration.Save();
+        }
+
+        ImGui.Text("Floor 4:");
+        ImGui.SameLine(80);
+        ImGui.SetNextItemWidth(80);
+        int floor4Clears = team.Floor4Clears;
+        if (ImGui.InputInt("##Floor4Clears", ref floor4Clears, 1, 5))
+        {
+            team.Floor4Clears = floor4Clears;
+            plugin.Configuration.Save();
+        }
+
+        ImGui.NextColumn();
+
+        // Right column - Member tables
         DrawMemberSection(team.Members, team);
+
+        ImGui.Columns(1);
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -355,7 +401,10 @@ public class MainWindow : Window, IDisposable
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
-                ImGui.Text("0"); // Placeholder - add data tracking per floor as needed
+                int pagesFromClears = GetPagesFromClears(team, floor);
+                int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
+                int totalPages = pagesFromClears + pageAdjustment;
+                ImGui.Text(totalPages.ToString());
             }
 
             // Pages Needed row
@@ -365,7 +414,12 @@ public class MainWindow : Window, IDisposable
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
-                ImGui.Text("4"); // Placeholder - calculate based on pages earned per floor
+                int pagesNeeded = CalculatePagesNeededForFloor(member, floor);
+                int pagesFromClears = GetPagesFromClears(team, floor);
+                int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
+                int totalPages = pagesFromClears + pageAdjustment;
+                int remainingPages = Math.Max(0, pagesNeeded - totalPages);
+                ImGui.Text(remainingPages.ToString());
             }
 
             // Page Adjust row
@@ -376,10 +430,11 @@ public class MainWindow : Window, IDisposable
             {
                 ImGui.TableSetColumnIndex(floor);
                 ImGui.SetNextItemWidth(35);
-                int adjustValue = 0; // Placeholder - add data tracking to model
+                int adjustValue = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
                 if (ImGui.InputInt($"##PageAdjust{memberIdx}_{floor}", ref adjustValue))
                 {
-                    // Update member data when changed
+                    member.PageAdjustments[floor] = adjustValue;
+                    plugin.Configuration.Save();
                 }
             }
 
@@ -405,7 +460,7 @@ public class MainWindow : Window, IDisposable
             ImGui.TableSetColumnIndex(0);
             ImGui.Text("Glazes Needed");
             ImGui.TableSetColumnIndex(1);
-            int glazesNeeded = (4 - member.PagesEarned) * 4;
+            int glazesNeeded = CalculateGlazesNeeded(member);
             ImGui.Text(glazesNeeded.ToString());
 
             // Twines Needed row
@@ -413,7 +468,7 @@ public class MainWindow : Window, IDisposable
             ImGui.TableSetColumnIndex(0);
             ImGui.Text("Twines Needed");
             ImGui.TableSetColumnIndex(1);
-            int twinesNeeded = (4 - member.PagesEarned) * 8;
+            int twinesNeeded = CalculateTwinesNeeded(member);
             ImGui.Text(twinesNeeded.ToString());
 
             ImGui.EndTable();
@@ -464,5 +519,114 @@ public class MainWindow : Window, IDisposable
             Models.GearSource.None => new Vector4(0.7f, 0.7f, 0.7f, 1.0f), // Gray
             _ => new Vector4(1.0f, 1.0f, 1.0f, 1.0f), // White
         };
+    }
+
+    private int CalculatePagesNeededForFloor(Models.RaidMember member, int floor)
+    {
+        // Map floors to gear slots that drop on each floor
+        // This is based on standard FFXIV Savage tier loot distribution
+        List<string> floorSlots = floor switch
+        {
+            1 => new() { "Ears", "Neck", "Wrists", "Ring2" },
+            2 => new() { "Head", "Hands", "Feet", "Glaze" },
+            3 => new() { "Body", "Legs", "Twine"},
+            4 => new() { "MainHand", "OffHand"},
+            _ => new()
+        };
+
+        int pagesNeeded = 0;
+
+        // Count gear pieces on this floor that need pages
+        foreach (var slotName in floorSlots)
+        {
+            if (member.Gear.TryGetValue(slotName, out var piece))
+            {
+                // Only calculate pages if desired source is Savage and doesn't match current
+                if (piece.DesiredSource == Models.GearSource.Savage && piece.Source != piece.DesiredSource)
+                {
+                    // Specific page costs for each piece type in FFXIV
+                    int pageCost = slotName switch
+                    {
+                        "MainHand" or "OffHand" => 8,
+                        "Body" or "Legs" => 6,
+                        "Head" or "Hands" or "Feet" or "Twine" => 4,
+                        "Ears" or "Neck" or "Wrists" or "Ring1" or "Ring2" or "Glaze" => 3,
+                        _ => 0
+                    };
+                    pagesNeeded += pageCost;
+                }
+            }
+        }
+
+        // Add extra pages needed for TomeUp materials
+        if (floor == 2)
+        {
+            int glazesNeeded = CalculateGlazesNeeded(member);
+            pagesNeeded += glazesNeeded * 3;
+        }
+        else if (floor == 3)
+        {
+            int twinesNeeded = CalculateTwinesNeeded(member);
+            pagesNeeded += twinesNeeded * 4;
+        }
+
+        return pagesNeeded;
+    }
+
+    private int CalculateGlazesNeeded(Models.RaidMember member)
+    {
+        // Glazes are needed for TomeUp gear on ears, neck, wrists, ring 1, or ring 2
+        List<string> glazeSlots = new() { "Ears", "Neck", "Wrists", "Ring1", "Ring2" };
+        int glazesNeeded = 0;
+
+        foreach (var slotName in glazeSlots)
+        {
+            if (member.Gear.TryGetValue(slotName, out var piece))
+            {
+                if (piece.DesiredSource == Models.GearSource.TomeUp && piece.Source != piece.DesiredSource)
+                {
+                    glazesNeeded += 1;
+                }
+            }
+        }
+
+        return glazesNeeded;
+    }
+
+    private int CalculateTwinesNeeded(Models.RaidMember member)
+    {
+        // Twines are needed for TomeUp gear on head, body, hands, legs, or feet
+        List<string> twineSlots = new() { "Head", "Body", "Hands", "Legs", "Feet" };
+        int twinesNeeded = 0;
+
+        foreach (var slotName in twineSlots)
+        {
+            if (member.Gear.TryGetValue(slotName, out var piece))
+            {
+                if (piece.DesiredSource == Models.GearSource.TomeUp && piece.Source != piece.DesiredSource)
+                {
+                    twinesNeeded += 1;
+                }
+            }
+        }
+
+        return twinesNeeded;
+    }
+
+    private int GetPagesFromClears(Models.RaidTeam team, int floor)
+    {
+        // Each clear of a floor gives a certain number of pages
+        // In FFXIV, each savage floor clear gives pages that can be used for gear
+        int clears = floor switch
+        {
+            1 => team.Floor1Clears,
+            2 => team.Floor2Clears,
+            3 => team.Floor3Clears,
+            4 => team.Floor4Clears,
+            _ => 0
+        };
+
+        // Each floor clear provides pages (typical FFXIV loot: 4 pages per clear)
+        return clears;
     }
 }

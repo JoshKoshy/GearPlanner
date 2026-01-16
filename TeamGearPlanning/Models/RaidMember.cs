@@ -13,6 +13,7 @@ public class RaidMember
     public int PagesEarned { get; set; } = 0;
     public int TokensEarned { get; set; } = 0;
     public DateTime LastUpdated { get; set; } = DateTime.Now;
+    public Dictionary<int, int> PageAdjustments { get; set; } = new() { { 1, 0 }, { 2, 0 }, { 3, 0 }, { 4, 0 } };
     
     public RaidMember() { }
     
