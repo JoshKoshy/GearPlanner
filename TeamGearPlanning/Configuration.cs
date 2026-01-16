@@ -1,7 +1,9 @@
 ﻿using Dalamud.Configuration;
 using System;
+using System.Collections.Generic;
+using TeamGearPlanning.Models;
 
-namespace SamplePlugin;
+namespace TeamGearPlanning;
 
 [Serializable]
 public class Configuration : IPluginConfiguration
@@ -9,7 +11,9 @@ public class Configuration : IPluginConfiguration
     public int Version { get; set; } = 0;
 
     public bool IsConfigWindowMovable { get; set; } = true;
-    public bool SomePropertyToBeSavedAndWithADefault { get; set; } = true;
+    public bool IsMainWindowMovable { get; set; } = true;
+    public List<RaidTeam> RaidTeams { get; set; } = new();
+    public int SelectedTeamIndex { get; set; } = -1;
 
     // The below exists just to make saving less cumbersome
     public void Save()
