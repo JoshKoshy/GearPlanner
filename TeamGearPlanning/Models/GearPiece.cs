@@ -8,16 +8,13 @@ public class GearPiece
     public GearStatus DesiredStatus { get; set; } = GearStatus.BiS;
     public GearSource Source { get; set; } = GearSource.Savage;
     public GearSource DesiredSource { get; set; } = GearSource.None;
+    public uint DesiredItemId { get; set; } = 0;
+    public uint CurrentItemId { get; set; } = 0;
     
     public GearPiece() { }
     
     public GearPiece(GearSlot slot)
     {
         Slot = slot;
-        // Default OffHand to None/blank
-        if (slot == GearSlot.OffHand)
-        {
-            Source = GearSource.None;
-        }
     }
 }

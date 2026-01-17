@@ -16,10 +16,12 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
 
     private const string CommandName = "/tgp";
 
     public Configuration Configuration { get; init; }
+    public BiSLibrary BiSLibrary { get; init; }
 
     public readonly WindowSystem WindowSystem = new("TeamGearPlanning");
     private ConfigWindow ConfigWindow { get; init; }
@@ -29,6 +31,14 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        
+        // Initialize ItemDatabase from game data
+        ItemDatabase.Initialize(DataManager);
+        
+        // Initialize BiS library
+        var configPath = PluginInterface.GetPluginConfigDirectory();
+        BiSLibrary = new BiSLibrary(configPath);
+        BiSLibrary.LoadBiSSets();
 
         // Create sample team if this is first launch
         bool isFirstLaunch = Configuration.RaidTeams.Count == 0;

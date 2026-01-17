@@ -35,7 +35,8 @@ public static class FFXIVJobs
         "Black Mage",
         "Summoner",
         "Red Mage",
-        "Blue Mage"
+        "Blue Mage",
+        "Pictomancer"
     };
 
     // Job abbreviations
@@ -61,7 +62,8 @@ public static class FFXIVJobs
         { "Black Mage", "BLM" },
         { "Summoner", "SMN" },
         { "Red Mage", "RDM" },
-        { "Blue Mage", "BLU" }
+        { "Blue Mage", "BLU" },
+        { "Pictomancer", "PCT" }
     };
 
     public static string[] GetAllJobOptions()
@@ -81,6 +83,11 @@ public static class FFXIVJobs
         return JobAbbreviations.TryGetValue(jobOrRole, out var abbr) ? abbr : jobOrRole;
     }
 
+    public static string GetJobAbbreviation(string job)
+    {
+        return JobAbbreviations.TryGetValue(job, out var abbr) ? abbr : job;
+    }
+
     public static Models.JobRole GetRoleForJob(string job)
     {
         return job switch
@@ -89,8 +96,13 @@ public static class FFXIVJobs
             "White Mage" or "Scholar" or "Astrologian" or "Sage" => Models.JobRole.Healer,
             "Dragoon" or "Monk" or "Ninja" or "Samurai" or "Reaper" or "Viper" => Models.JobRole.MeleeDPS,
             "Bard" or "Machinist" or "Dancer" => Models.JobRole.RangedDPS,
-            "Black Mage" or "Summoner" or "Red Mage" or "Blue Mage" => Models.JobRole.MagicDPS,
+            "Black Mage" or "Summoner" or "Red Mage" or "Blue Mage" or "Pictomancer" => Models.JobRole.MagicDPS,
             _ => Models.JobRole.Unknown
         };
+    }
+
+    public static string GetJobCodeFromName(string jobName)
+    {
+        return JobAbbreviations.TryGetValue(jobName, out var code) ? code : jobName;
     }
 }

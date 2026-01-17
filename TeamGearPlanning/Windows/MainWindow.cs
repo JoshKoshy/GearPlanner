@@ -15,6 +15,8 @@ public class MainWindow : Window, IDisposable
     private readonly Plugin plugin;
     private readonly string[] gearSourceOptions = { "Savage", "Tome Up", "Catchup", "Tome", "Relic", "Crafted", "Prep", "Trash", "Wow" };
     private readonly string[] jobOptions = Helpers.FFXIVJobs.GetAllJobOptions();
+    private Dictionary<int, string> memberXivGearUrlInput = new(); // Store URL input per member
+    private Dictionary<int, int> memberBiSSetIndex = new(); // Store selected BiS set index per member
 
     public MainWindow(Plugin plugin)
         : base("Team Gear Planning##MainWindow")
@@ -80,6 +82,7 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
+        ImGui.Separator();
         ImGui.Spacing();
 
         // Floor clears section
@@ -126,38 +129,130 @@ public class MainWindow : Window, IDisposable
 
         ImGui.NextColumn();
 
-        // Right column - Member tables
-        DrawMemberSection(team.Members, team);
-
-        ImGui.Columns(1);
-
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Spacing();
+        // Right column - Member tables in a child window
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        float legendMinWidth = 330f;
+        float memberTableWidth = availableWidth - legendMinWidth;
         
-        // Legend
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Legend:");
-        ImGui.SameLine(100);
-        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Red");
-        ImGui.SameLine(150);
-        ImGui.Text("= Low iLvl");
-        ImGui.SameLine(250);
-        ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "White");
-        ImGui.SameLine(330);
-        ImGui.Text("= Crafted");
-        ImGui.SameLine(420);
-        ImGui.TextColored(new Vector4(0.5f, 0.8f, 1.0f, 1.0f), "Lt.Blue");
-        ImGui.SameLine(510);
-        ImGui.Text("= Alliance");
+        if (ImGui.BeginChild("MembersAndLegend", new Vector2(availableWidth, -1), false))
+        {
+            ImGui.Columns(2, "RightSection", false);
+            ImGui.SetColumnWidth(0, memberTableWidth);
+            ImGui.SetColumnWidth(1, legendMinWidth);
+            
+            // Left - Member tables
+            DrawMemberSection(team.Members, team);
 
-        ImGui.SameLine(650);
-        ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Blue");
-        ImGui.SameLine(700);
-        ImGui.Text("= Savage");
-        ImGui.SameLine(800);
-        ImGui.TextColored(new Vector4(0.8f, 0.0f, 1.0f, 1.0f), "Purple");
-        ImGui.SameLine(880);
-        ImGui.Text("= BiS");
+            ImGui.NextColumn();
+
+            // Right - Legend in a separate child window
+            if (ImGui.BeginChild("LegendChild", new Vector2(-1, -1), true))
+            {
+                // Set default text color to grey
+                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.7f, 0.7f, 0.7f, 1.0f));
+                
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Legend");
+                ImGui.SameLine(200);
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Weapon");
+                ImGui.SameLine(260);
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "ilvl");
+                ImGui.Separator();
+
+                ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Savage");
+                ImGui.SameLine(200);
+                ImGui.Text("795");
+                ImGui.SameLine(260);
+                ImGui.Text("790");
+                ImGui.TextWrapped("Drops from Savage raid.");
+
+                ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Tome Up");
+                ImGui.SameLine(200);
+                ImGui.Text("");
+                ImGui.SameLine(260);
+                ImGui.Text("");
+                ImGui.TextWrapped("Upgraded capped tome gear.");
+
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Catchup");
+                ImGui.SameLine(200);
+                ImGui.Text("785");
+                ImGui.SameLine(260);
+                ImGui.Text("780");
+                ImGui.TextWrapped("Aug, crafted, drops from mid-tier EX, alliance raid, etc.");
+
+                ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Tome");
+                ImGui.SameLine(200);
+                ImGui.Text("780");
+                ImGui.SameLine(260);
+                ImGui.Text("");
+                ImGui.TextWrapped("Non-upgraded capped tome gear.");
+
+                ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Relic");
+                ImGui.SameLine(200);
+                ImGui.Text("775");
+                ImGui.SameLine(260);
+                ImGui.Text("770");
+                ImGui.TextWrapped("Continuously upgradeable personalized gear.");
+
+                ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Crafted");
+                ImGui.SameLine(200);
+                ImGui.Text("");
+                ImGui.SameLine(260);
+                ImGui.Text("770");
+                ImGui.TextWrapped("High-quality crafted gear.");
+
+                ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Prep");
+                ImGui.SameLine(200);
+                ImGui.Text("775");
+                ImGui.SameLine(260);
+                ImGui.Text("770");
+                ImGui.TextWrapped("Drops from EX, normal raid, etc.");
+
+                ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Trash");
+                ImGui.SameLine(200);
+                ImGui.Text("765");
+                ImGui.SameLine(260);
+                ImGui.Text("760");
+                ImGui.TextWrapped("Uncapped tome gear, dungeon gear, last tier's BiS, etc.");
+
+                ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Wow");
+                ImGui.SameLine(200);
+                ImGui.Text("745");
+                ImGui.SameLine(260);
+                ImGui.Text("740");
+                ImGui.TextWrapped("You aren't seriously considering raiding with this, are you?");
+
+                ImGui.Spacing();
+                ImGui.Separator();
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Color Guide");
+                ImGui.Separator();
+
+                ImGui.TextColored(new Vector4(0.8f, 0.0f, 1.0f, 1.0f), "Purple");
+                ImGui.TextWrapped("Already have the desired gear.");
+
+                ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Blue");
+                ImGui.TextWrapped("Already at/near max ilv.");
+
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Green");
+                ImGui.TextWrapped("Intermediate gear.");
+
+                ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Yellow");
+                ImGui.TextWrapped("Needs 1 of the 3 upgrade tokens. (Chest/Pants bold.)");
+
+                ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "White");
+                ImGui.TextWrapped("Potential for significant improvement.");
+
+                ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Red");
+                ImGui.TextWrapped("Upgrade this ASAP");
+
+                ImGui.PopStyleColor();
+                ImGui.EndChild();
+            }
+
+            ImGui.Columns(1);
+            ImGui.EndChild();
+        }
+        
+        ImGui.Columns(1);
     }
 
     private void DrawMemberSection(List<Models.RaidMember> members, Models.RaidTeam team)
@@ -215,7 +310,7 @@ public class MainWindow : Window, IDisposable
             int currentJobIdx = System.Array.IndexOf(jobOptions, member.Job);
             if (currentJobIdx < 0) currentJobIdx = 0;
             
-            ImGui.SetNextItemWidth(-1);
+            ImGui.SetNextItemWidth(-95);
             if (ImGui.Combo($"##Job{memberIdx}", ref currentJobIdx, jobOptions))
             {
                 member.Job = jobOptions[currentJobIdx];
@@ -225,6 +320,64 @@ public class MainWindow : Window, IDisposable
                     member.Role = role;
                 }
                 plugin.Configuration.Save();
+            }
+
+            // Import BiS button
+            ImGui.SameLine();
+            if (ImGui.Button("Import BiS", new Vector2(-1, 0)))
+            {
+                ImGui.OpenPopup($"XivGearImportPopup{memberIdx}");
+            }
+
+            // Import dialog for xivgear.app
+            if (ImGui.BeginPopupModal($"XivGearImportPopup{memberIdx}", ImGuiWindowFlags.AlwaysAutoResize))
+            {
+                ImGui.TextWrapped("Select a BiS set for this job:");
+                ImGui.Separator();
+
+                // Convert job name to abbreviation for lookup
+                var jobAbbr = Helpers.FFXIVJobs.GetJobAbbreviation(member.Job);
+                Plugin.Log.Information($"DEBUG: Looking up job '{member.Job}' with abbreviation '{jobAbbr}'");
+                var bisSets = plugin.BiSLibrary.GetBiSSetsForJob(jobAbbr);
+                Plugin.Log.Information($"DEBUG: Found {bisSets.Count} sets for job {jobAbbr}");
+                
+                if (bisSets.Count > 0)
+                {
+                    if (!memberBiSSetIndex.ContainsKey(memberIdx))
+                        memberBiSSetIndex[memberIdx] = 0;
+
+                    var setNames = bisSets.Select(s => s.Name).ToArray();
+                    int selectedIndex = memberBiSSetIndex[memberIdx];
+                    
+                    ImGui.SetNextItemWidth(300);
+                    if (ImGui.Combo($"##BiSSetSelect{memberIdx}", ref selectedIndex, setNames))
+                    {
+                        memberBiSSetIndex[memberIdx] = selectedIndex;
+                    }
+
+                    ImGui.Spacing();
+
+                    if (ImGui.Button("Import", new Vector2(100, 0)))
+                    {
+                        if (selectedIndex >= 0 && selectedIndex < bisSets.Count)
+                        {
+                            ImportBiSSet(member, bisSets[selectedIndex]);
+                            ImGui.CloseCurrentPopup();
+                        }
+                    }
+                }
+                else
+                {
+                    ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"No BiS sets available for {member.Job}");
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel", new Vector2(100, 0)))
+                {
+                    ImGui.CloseCurrentPopup();
+                }
+
+                ImGui.EndPopup();
             }
             
             ImGui.Spacing();
@@ -265,7 +418,7 @@ public class MainWindow : Window, IDisposable
 
                 // Gear Slot column
                 ImGui.TableSetColumnIndex(0);
-                ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.8f, 1.0f), slotName);
+                ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.8f, 1.0f), FormatSlotName(slotName));
 
                 // Desired gear column
                 if (member.Gear.TryGetValue(slotName, out var piece))
@@ -286,7 +439,7 @@ public class MainWindow : Window, IDisposable
                     }
                     
                     ImGui.TableSetColumnIndex(1);
-                    string desiredSourceDisplay = piece.DesiredSource.ToString() == "None" ? "" : piece.DesiredSource.ToString();
+                    string desiredSourceDisplay = piece.DesiredSource.ToString() == "None" ? "" : FormatSourceName(piece.DesiredSource.ToString());
                     ImGui.TextColored(desiredColor, desiredSourceDisplay);
                     
                     // Make empty cells clickable with invisible button
@@ -306,7 +459,24 @@ public class MainWindow : Window, IDisposable
                     // Tooltip for desired
                     if (ImGui.IsItemHovered())
                     {
-                        ImGui.SetTooltip($"{piece.DesiredSource}");
+                        string tooltipText = piece.DesiredSource.ToString();
+                        if (piece.DesiredItemId > 0)
+                        {
+                            var item = Helpers.ItemDatabase.GetItemById(piece.DesiredItemId);
+                            if (item != null)
+                            {
+                                tooltipText = item.Name;
+                            }
+                        }
+                        ImGui.SetTooltip(tooltipText);
+                        
+                        // Right-click to clear desired
+                        if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+                        {
+                            piece.DesiredSource = GearSource.None;
+                            piece.DesiredItemId = 0;
+                            plugin.Configuration.Save();
+                        }
                     }
                     
                     // Current gear column
@@ -331,7 +501,24 @@ public class MainWindow : Window, IDisposable
                     // Tooltip showing full info
                     if (ImGui.IsItemHovered())
                     {
-                        ImGui.SetTooltip($"{piece.Source} | {piece.CurrentStatus}");
+                        string tooltipText = piece.Source.ToString();
+                        if (piece.CurrentItemId > 0)
+                        {
+                            var item = Helpers.ItemDatabase.GetItemById(piece.CurrentItemId);
+                            if (item != null)
+                            {
+                                tooltipText = item.Name;
+                            }
+                        }
+                        ImGui.SetTooltip(tooltipText);
+                        
+                        // Right-click to clear current
+                        if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+                        {
+                            piece.Source = GearSource.None;
+                            piece.CurrentItemId = 0;
+                            plugin.Configuration.Save();
+                        }
                     }
                     
                     // Right-click menu for source
@@ -346,6 +533,7 @@ public class MainWindow : Window, IDisposable
                             if (ImGui.MenuItem(sourceOption, "", piece.Source.ToString() == sourceEnumValue))
                             {
                                 piece.Source = System.Enum.Parse<GearSource>(sourceEnumValue);
+                                piece.CurrentItemId = FindItemIdForGearSlot(member.Job, slotName, piece.Source);
                                 plugin.Configuration.Save();
                             }
                         }
@@ -365,6 +553,7 @@ public class MainWindow : Window, IDisposable
                             if (ImGui.MenuItem(sourceOption, "", piece.DesiredSource.ToString() == sourceEnumValue))
                             {
                                 piece.DesiredSource = System.Enum.Parse<GearSource>(sourceEnumValue);
+                                piece.DesiredItemId = FindItemIdForGearSlot(member.Job, slotName, piece.DesiredSource);
                                 plugin.Configuration.Save();
                             }
                         }
@@ -530,7 +719,7 @@ public class MainWindow : Window, IDisposable
             1 => new() { "Ears", "Neck", "Wrists", "Ring2" },
             2 => new() { "Head", "Hands", "Feet", "Glaze" },
             3 => new() { "Body", "Legs", "Twine"},
-            4 => new() { "MainHand", "OffHand"},
+            4 => new() { "MainHand"},
             _ => new()
         };
 
@@ -547,7 +736,7 @@ public class MainWindow : Window, IDisposable
                     // Specific page costs for each piece type in FFXIV
                     int pageCost = slotName switch
                     {
-                        "MainHand" or "OffHand" => 8,
+                        "MainHand" => 8,
                         "Body" or "Legs" => 6,
                         "Head" or "Hands" or "Feet" or "Twine" => 4,
                         "Ears" or "Neck" or "Wrists" or "Ring1" or "Ring2" or "Glaze" => 3,
@@ -629,4 +818,126 @@ public class MainWindow : Window, IDisposable
         // Each floor clear provides pages (typical FFXIV loot: 4 pages per clear)
         return clears;
     }
+    private string FormatSlotName(string slotName)
+    {
+        // Convert camelCase names to spaced names
+        return slotName switch
+        {
+            "MainHand" => "Main Hand",
+            "Ring1" => "Ring 1",
+            "Ring2" => "Ring 2",
+            _ => slotName
+        };
+    }
+
+    private string FormatSourceName(string sourceName)
+    {
+        // Convert camelCase source names to spaced names
+        return sourceName switch
+        {
+            "TomeUp" => "Tome Up",
+            _ => sourceName
+        };
+    }
+
+    private void SetAllDesiredSources(List<Models.RaidMember> members, Models.GearSource source)
+    {
+        foreach (var member in members)
+        {
+            foreach (var gear in member.Gear.Values)
+            {
+                gear.DesiredSource = source;
+            }
+        }
+        plugin.Configuration.Save();
+    }
+
+    private void SetSavageWithTomeUpAccessories(List<Models.RaidMember> members)
+    {
+        foreach (var member in members)
+        {
+            foreach (var gear in member.Gear.Values)
+            {
+                // TomeUp for accessories (rings, ears, neck, wrists)
+                if (gear.Slot == GearSlot.Ring1 || gear.Slot == GearSlot.Ring2 || 
+                    gear.Slot == GearSlot.Ears || gear.Slot == GearSlot.Neck || 
+                    gear.Slot == GearSlot.Wrists)
+                {
+                    gear.DesiredSource = GearSource.TomeUp;
+                }
+                else
+                {
+                    gear.DesiredSource = GearSource.Savage;
+                }
+            }
+        }
+        plugin.Configuration.Save();
+    }
+
+    private void ImportBiSSet(Models.RaidMember member, Models.BiSSet biSSet)
+    {
+        if (biSSet.Items == null || biSSet.Items.Count == 0)
+            return;
+
+        // Map each item in the BiS set to the member's gear
+        foreach (var kvp in biSSet.Items)
+        {
+            string xivGearSlot = kvp.Key;
+            var biSItem = kvp.Value;
+
+            // Map slot name from xivgear format to our internal format
+            string internalSlot = Helpers.BiSLibrary.MapXivGearSlotToInternal(xivGearSlot);
+
+            if (member.Gear.TryGetValue(internalSlot, out var gearPiece))
+            {
+                // Detect the gear source from the item ID using IDataManager
+                var gearSource = Helpers.BiSLibrary.DetectGearSourceFromItemId(biSItem.Id);
+                gearPiece.DesiredSource = gearSource;
+                gearPiece.DesiredItemId = (uint)biSItem.Id;
+                
+                // Verify the item was found in database
+                var itemLookup = Helpers.ItemDatabase.GetItemById((uint)biSItem.Id);
+                string itemName = itemLookup?.Name ?? "Item not found in database";
+                Plugin.Log.Debug($"Applied BiS for {member.Name} - {internalSlot}: Item ID {biSItem.Id} ({itemName}) (Source: {gearSource})");
+            }
+        }
+
+        plugin.Configuration.Save();
+        Plugin.Log.Information($"Imported BiS set '{biSSet.Name}' for {member.Name} ({member.Job})");
+    }
+
+    private string LookupItemName(int itemId)
+    {
+        // Placeholder for future item name lookup using IDataManager
+        // This will be implemented when we have proper Dalamud API access
+        return $"Item {itemId}";
+    }
+
+    private uint FindItemIdForGearSlot(string job, string slotName, GearSource source)
+    {
+        try
+        {
+            // Get all items matching the selected source category
+            var itemsForSource = Helpers.ItemDatabase.GetItemsByCategory(source);
+            if (itemsForSource.Count == 0)
+                return 0;
+
+            // Filter to items that can be equipped by this job
+            var jobCode = Helpers.FFXIVJobs.GetJobCodeFromName(job);
+            var itemsForJob = itemsForSource.Where(item => item.Jobs.Contains(jobCode)).ToList();
+
+            if (itemsForJob.Count == 0)
+                return 0;
+
+            // Return the first matching item's ID
+            // User can right-click to clear if they want a different item
+            return itemsForJob.First().Id;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error($"Error finding item for slot {slotName}, job {job}, source {source}: {ex.Message}");
+            return 0;
+        }
+    }
+
 }

@@ -4,7 +4,6 @@ namespace TeamGearPlanning.Models;
 public enum GearSlot
 {
     MainHand,
-    OffHand,
     Head,
     Body,
     Hands,
