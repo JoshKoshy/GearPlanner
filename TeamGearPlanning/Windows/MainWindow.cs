@@ -323,10 +323,18 @@ public class MainWindow : Window, IDisposable
             }
 
             // Import BiS button
-            ImGui.SameLine();
+            ImGui.SetNextItemWidth(-1);
             if (ImGui.Button("Import BiS", new Vector2(-1, 0)))
             {
                 ImGui.OpenPopup($"XivGearImportPopup{memberIdx}");
+            }
+
+            // Sync Current Gear button
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.Button("Sync Current", new Vector2(-1, 0)))
+            {
+                Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
+                plugin.Configuration.Save();
             }
 
             // Import dialog for xivgear.app
