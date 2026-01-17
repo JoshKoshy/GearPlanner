@@ -155,7 +155,7 @@ public static class EquipmentReader
     /// <summary>
     /// Smart ring syncing that matches ring sources to desired sources.
     /// </summary>
-    private static void SyncRingsToMember(RaidMember member, Dictionary<GearSlot, uint> ringsToSync)
+    public static void SyncRingsToMember(RaidMember member, Dictionary<GearSlot, uint> ringsToSync)
     {
         // Get the desired sources for both ring slots
         var ring1Key = GearSlot.Ring1.ToString();

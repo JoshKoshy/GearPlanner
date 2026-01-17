@@ -17,6 +17,9 @@ public class MainWindow : Window, IDisposable
     private readonly string[] jobOptions = Helpers.FFXIVJobs.GetAllJobOptions();
     private Dictionary<int, string> memberXivGearUrlInput = new(); // Store URL input per member
     private Dictionary<int, int> memberBiSSetIndex = new(); // Store selected BiS set index per member
+    private int selectedTab = 1; // 0=Individual, 1=Team, 2=Loot Planner, 3=Who Needs it?
+    private readonly string[] tabNames = { "Individual", "Team", "Loot Planner", "Who Needs it?" };
+    private Models.RaidMember? individualTabMember; // Persistent member for Individual tab
 
     public MainWindow(Plugin plugin)
         : base("Team Gear Planning##MainWindow")
@@ -46,6 +49,214 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Separator();
 
+        // Tab bar
+        if (ImGui.BeginTabBar("MainTabs", ImGuiTabBarFlags.None))
+        {
+            for (int i = 0; i < tabNames.Length; i++)
+            {
+                if (ImGui.BeginTabItem(tabNames[i]))
+                {
+                    selectedTab = i;
+                    ImGui.EndTabItem();
+                }
+            }
+            ImGui.EndTabBar();
+        }
+
+        ImGui.Separator();
+
+        // Tab content
+        switch (selectedTab)
+        {
+            case 0: // Individual tab
+                DrawIndividualTab();
+                break;
+
+            case 1: // Team tab
+                DrawTeamTab();
+                break;
+
+            case 2: // Loot Planner tab
+                ImGui.Text("Loot Planner tab - Coming soon");
+                break;
+
+            case 3: // Who Needs it? tab
+                ImGui.Text("Who Needs it? tab - Coming soon");
+                break;
+        }
+    }
+
+    private void DrawIndividualTab()
+    {
+        // Initialize persistent member if needed
+        if (individualTabMember == null)
+        {
+            individualTabMember = new Models.RaidMember("Player Name", "Paladin", Models.JobRole.Tank);
+            individualTabMember.InitializeGear();
+        }
+
+        var member = individualTabMember;
+
+        // Use columns to layout Floor Clears on left and member section on right
+        ImGui.Columns(2, "IndividualLayout", false);
+        ImGui.SetColumnWidth(0, 150);
+
+        // Left column - Floor Clears
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
+        ImGui.Text("Floor 1:");
+        ImGui.SameLine(80);
+        ImGui.SetNextItemWidth(50);
+        int floor1Clears = member.FloorClears.ContainsKey(1) ? member.FloorClears[1] : 0;
+        if (ImGui.InputInt("##IndividualFloor1Clears", ref floor1Clears, 1, 5))
+        {
+            member.FloorClears[1] = floor1Clears;
+            plugin.Configuration.Save();
+        }
+
+        ImGui.Text("Floor 2:");
+        ImGui.SameLine(80);
+        ImGui.SetNextItemWidth(50);
+        int floor2Clears = member.FloorClears.ContainsKey(2) ? member.FloorClears[2] : 0;
+        if (ImGui.InputInt("##IndividualFloor2Clears", ref floor2Clears, 1, 5))
+        {
+            member.FloorClears[2] = floor2Clears;
+            plugin.Configuration.Save();
+        }
+
+        ImGui.Text("Floor 3:");
+        ImGui.SameLine(80);
+        ImGui.SetNextItemWidth(50);
+        int floor3Clears = member.FloorClears.ContainsKey(3) ? member.FloorClears[3] : 0;
+        if (ImGui.InputInt("##IndividualFloor3Clears", ref floor3Clears, 1, 5))
+        {
+            member.FloorClears[3] = floor3Clears;
+            plugin.Configuration.Save();
+        }
+
+        ImGui.Text("Floor 4:");
+        ImGui.SameLine(80);
+        ImGui.SetNextItemWidth(50);
+        int floor4Clears = member.FloorClears.ContainsKey(4) ? member.FloorClears[4] : 0;
+        if (ImGui.InputInt("##IndividualFloor4Clears", ref floor4Clears, 1, 5))
+        {
+            member.FloorClears[4] = floor4Clears;
+            plugin.Configuration.Save();
+        }
+
+        ImGui.NextColumn();
+
+        // Right column - Member section
+        if (ImGui.BeginChild("IndividualMemberSection", new System.Numerics.Vector2(350, 590), true))
+        {
+            // Member name - editable
+            string name = member.Name;
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.InputText("##IndividualCharName", ref name, 50, ImGuiInputTextFlags.EnterReturnsTrue))
+            {
+                member.Name = name;
+                plugin.Configuration.Save();
+            }
+            
+            // Job dropdown
+            int currentJobIdx = System.Array.IndexOf(jobOptions, member.Job);
+            if (currentJobIdx < 0) currentJobIdx = 0;
+            
+            ImGui.SetNextItemWidth(-95);
+            if (ImGui.Combo("##IndividualJob", ref currentJobIdx, jobOptions))
+            {
+                member.Job = jobOptions[currentJobIdx];
+                var role = Helpers.FFXIVJobs.GetRoleForJob(member.Job);
+                if (role != Models.JobRole.Unknown)
+                {
+                    member.Role = role;
+                }
+                plugin.Configuration.Save();
+            }
+
+            // Import BiS button
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.Button("Import BiS", new Vector2(-1, 0)))
+            {
+                ImGui.OpenPopup("XivGearImportPopupIndividual");
+            }
+
+            // Sync Current Gear button
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.Button("Sync Current", new Vector2(-1, 0)))
+            {
+                Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
+                plugin.Configuration.Save();
+            }
+
+            // Import dialog for xivgear.app
+            if (ImGui.BeginPopupModal("XivGearImportPopupIndividual", ImGuiWindowFlags.AlwaysAutoResize))
+            {
+                ImGui.TextWrapped("Select a BiS set for this job:");
+                ImGui.Separator();
+
+                // Convert job name to abbreviation for lookup
+                var jobAbbr = Helpers.FFXIVJobs.GetJobAbbreviation(member.Job);
+                var bisSets = plugin.BiSLibrary.GetBiSSetsForJob(jobAbbr);
+                
+                if (bisSets.Count > 0)
+                {
+                    if (!memberBiSSetIndex.ContainsKey(-1))
+                        memberBiSSetIndex[-1] = 0;
+
+                    var setNames = bisSets.Select(s => s.Name).ToArray();
+                    int selectedIndex = memberBiSSetIndex[-1];
+                    
+                    ImGui.SetNextItemWidth(300);
+                    if (ImGui.Combo("##BiSSetSelectIndividual", ref selectedIndex, setNames))
+                    {
+                        memberBiSSetIndex[-1] = selectedIndex;
+                    }
+
+                    ImGui.Spacing();
+
+                    if (ImGui.Button("Import", new Vector2(100, 0)))
+                    {
+                        if (selectedIndex >= 0 && selectedIndex < bisSets.Count)
+                        {
+                            ImportBiSSet(member, bisSets[selectedIndex]);
+                            ImGui.CloseCurrentPopup();
+                        }
+                    }
+                }
+                else
+                {
+                    ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"No BiS sets available for {member.Job}");
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel", new Vector2(100, 0)))
+                {
+                    ImGui.CloseCurrentPopup();
+                }
+
+                ImGui.EndPopup();
+            }
+            
+            ImGui.Spacing();
+            
+            DrawGearTableForIndividualMember(member);
+            
+            ImGui.Spacing();
+            
+            DrawCurrencyTableForIndividualMember(member);
+            
+            ImGui.Spacing();
+            
+            DrawMaterialsTableForIndividualMember(member);
+            
+            ImGui.EndChild();
+        }
+
+        ImGui.Columns(1);
+    }
+
+    private void DrawTeamTab()
+    {
         if (plugin.Configuration.RaidTeams.Count == 0)
         {
             ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.0f, 1.0f), "No raid teams configured.");
@@ -265,7 +476,7 @@ public class MainWindow : Window, IDisposable
             var rowMembers = members.Skip(rowIdx * maxPerRow).Take(maxPerRow).ToList();
             
             if (ImGui.BeginChild($"Section_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", 
-                new Vector2(rowMembers.Count * 355 + (rowMembers.Count - 1) * 5, 565), false))
+                new Vector2(rowMembers.Count * 355 + (rowMembers.Count - 1) * 5, 590), false))
             {
                 ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(5, 5));
                 ImGui.Columns(rowMembers.Count, $"SectionColumns_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", false);
@@ -295,7 +506,7 @@ public class MainWindow : Window, IDisposable
         var member = team.Members[memberIdx];
         
         // Constrain to a max width and height
-        if (ImGui.BeginChild($"MemberSection{memberIdx}", new System.Numerics.Vector2(350, 565), true))
+        if (ImGui.BeginChild($"MemberSection{memberIdx}", new System.Numerics.Vector2(350, 590), true))
         {
             // Member name - editable
             string name = member.Name;
@@ -910,6 +1121,30 @@ public class MainWindow : Window, IDisposable
             }
         }
 
+        // Re-sync rings to match new desired sources if they're equipped
+        var ring1Key = Models.GearSlot.Ring1.ToString();
+        var ring2Key = Models.GearSlot.Ring2.ToString();
+        
+        bool hasRing1 = member.Gear.TryGetValue(ring1Key, out var ring1) && ring1?.CurrentItemId > 0;
+        bool hasRing2 = member.Gear.TryGetValue(ring2Key, out var ring2) && ring2?.CurrentItemId > 0;
+        
+        if (hasRing1 || hasRing2)
+        {
+            // Create a dictionary of current ring items to re-sync
+            var currentRings = new Dictionary<Models.GearSlot, uint>();
+            if (hasRing1 && ring1 != null)
+                currentRings[Models.GearSlot.Ring1] = ring1.CurrentItemId;
+            if (hasRing2 && ring2 != null)
+                currentRings[Models.GearSlot.Ring2] = ring2.CurrentItemId;
+            
+            // Re-apply ring syncing logic with new desired sources
+            if (currentRings.Count > 0)
+            {
+                Helpers.EquipmentReader.SyncRingsToMember(member, currentRings);
+                Plugin.Log.Information($"Re-synced rings for {member.Name} after BiS import");
+            }
+        }
+
         plugin.Configuration.Save();
         Plugin.Log.Information($"Imported BiS set '{biSSet.Name}' for {member.Name} ({member.Job})");
     }
@@ -945,6 +1180,253 @@ public class MainWindow : Window, IDisposable
         {
             Plugin.Log.Error($"Error finding item for slot {slotName}, job {job}, source {source}: {ex.Message}");
             return 0;
+        }
+    }
+
+    private void DrawGearTableForIndividualMember(Models.RaidMember member)
+    {
+        var gearSlots = System.Enum.GetNames(typeof(Models.GearSlot));
+
+        if (ImGui.BeginTable("IndividualGearTable", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+        {
+            // Setup columns: Slot, Desired, Current
+            ImGui.TableSetupColumn("Slot", ImGuiTableColumnFlags.WidthFixed, 140);
+            ImGui.TableSetupColumn("Desired", ImGuiTableColumnFlags.WidthFixed, 65);
+            ImGui.TableSetupColumn("Current", ImGuiTableColumnFlags.WidthFixed, 65);
+
+            // Header row
+            ImGui.TableHeadersRow();
+
+            // Data rows - one for each gear slot
+            foreach (var slotName in gearSlots)
+            {
+                ImGui.TableNextRow(ImGuiTableRowFlags.None, 25);
+
+                // Gear Slot column
+                ImGui.TableSetColumnIndex(0);
+                ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.8f, 1.0f), FormatSlotName(slotName));
+
+                // Desired gear column
+                if (member.Gear.TryGetValue(slotName, out var piece))
+                {
+                    var desiredColor = new Vector4(1.0f, 1.0f, 1.0f, 1.0f); // Default white
+                    var currentColor = GetSourceColor(piece.Source);
+                    
+                    // Check if desired source matches current source - use purple if so
+                    if (piece.DesiredSource != Models.GearSource.None && piece.Source == piece.DesiredSource)
+                    {
+                        desiredColor = new Vector4(0.8f, 0.0f, 1.0f, 1.0f); // Purple
+                    }
+                    
+                    // Check if current source matches desired - use purple if so
+                    if (piece.Source == piece.DesiredSource && piece.Source != Models.GearSource.None)
+                    {
+                        currentColor = new Vector4(0.8f, 0.0f, 1.0f, 1.0f); // Purple
+                    }
+                    
+                    ImGui.TableSetColumnIndex(1);
+                    string desiredSourceDisplay = piece.DesiredSource.ToString() == "None" ? "" : FormatSourceName(piece.DesiredSource.ToString());
+                    ImGui.TextColored(desiredColor, desiredSourceDisplay);
+                    
+                    // Make empty cells clickable with invisible button
+                    if (desiredSourceDisplay == "")
+                    {
+                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - ImGui.GetTextLineHeight());
+                        if (ImGui.InvisibleButton($"DesiredGearIndividual_{slotName}", new System.Numerics.Vector2(-1, ImGui.GetTextLineHeight())))
+                        {
+                            ImGui.OpenPopup($"StatusMenuIndividual_{slotName}");
+                        }
+                    }
+                    else if (ImGui.IsItemClicked())
+                    {
+                        ImGui.OpenPopup($"StatusMenuIndividual_{slotName}");
+                    }
+                    
+                    // Tooltip for desired
+                    if (ImGui.IsItemHovered())
+                    {
+                        string tooltipText = piece.DesiredSource.ToString();
+                        if (piece.DesiredItemId > 0)
+                        {
+                            var item = Helpers.ItemDatabase.GetItemById(piece.DesiredItemId);
+                            if (item != null)
+                            {
+                                tooltipText = item.Name;
+                            }
+                        }
+                        ImGui.SetTooltip(tooltipText);
+                        
+                        // Right-click to clear desired
+                        if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+                        {
+                            piece.DesiredSource = GearSource.None;
+                            piece.DesiredItemId = 0;
+                            plugin.Configuration.Save();
+                        }
+                    }
+                    
+                    // Current gear column
+                    ImGui.TableSetColumnIndex(2);
+                    string sourceDisplay = piece.Source.ToString() == "None" ? "" : piece.Source.ToString();
+                    ImGui.TextColored(currentColor, sourceDisplay);
+                    
+                    // Make empty cells clickable with invisible button
+                    if (sourceDisplay == "")
+                    {
+                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - ImGui.GetTextLineHeight());
+                        if (ImGui.InvisibleButton($"CurrentGearIndividual_{slotName}", new System.Numerics.Vector2(-1, ImGui.GetTextLineHeight())))
+                        {
+                            ImGui.OpenPopup($"SourceMenuIndividual_{slotName}");
+                        }
+                    }
+                    else if (ImGui.IsItemClicked())
+                    {
+                        ImGui.OpenPopup($"SourceMenuIndividual_{slotName}");
+                    }
+                    
+                    // Tooltip showing full info
+                    if (ImGui.IsItemHovered())
+                    {
+                        string tooltipText = piece.Source.ToString();
+                        if (piece.CurrentItemId > 0)
+                        {
+                            var item = Helpers.ItemDatabase.GetItemById(piece.CurrentItemId);
+                            if (item != null)
+                            {
+                                tooltipText = item.Name;
+                            }
+                        }
+                        ImGui.SetTooltip(tooltipText);
+                        
+                        // Right-click to clear current
+                        if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+                        {
+                            piece.Source = GearSource.None;
+                            piece.CurrentItemId = 0;
+                            plugin.Configuration.Save();
+                        }
+                    }
+                    
+                    // Right-click menu for source
+                    if (ImGui.BeginPopup($"SourceMenuIndividual_{slotName}"))
+                    {
+                        ImGui.TextDisabled("Gear Source:");
+                        ImGui.Separator();
+                        
+                        foreach (var sourceOption in gearSourceOptions)
+                        {
+                            var sourceEnumValue = sourceOption.Replace(" ", "");
+                            if (ImGui.MenuItem(sourceOption, "", piece.Source.ToString() == sourceEnumValue))
+                            {
+                                piece.Source = System.Enum.Parse<GearSource>(sourceEnumValue);
+                                piece.CurrentItemId = FindItemIdForGearSlot(member.Job, slotName, piece.Source);
+                                plugin.Configuration.Save();
+                            }
+                        }
+                        
+                        ImGui.EndPopup();
+                    }
+                    
+                    // Menu for desired source
+                    if (ImGui.BeginPopup($"StatusMenuIndividual_{slotName}"))
+                    {
+                        ImGui.TextDisabled("Desired Source:");
+                        ImGui.Separator();
+                        
+                        foreach (var sourceOption in gearSourceOptions)
+                        {
+                            var sourceEnumValue = sourceOption.Replace(" ", "");
+                            if (ImGui.MenuItem(sourceOption, "", piece.DesiredSource.ToString() == sourceEnumValue))
+                            {
+                                piece.DesiredSource = System.Enum.Parse<GearSource>(sourceEnumValue);
+                                piece.DesiredItemId = FindItemIdForGearSlot(member.Job, slotName, piece.DesiredSource);
+                                plugin.Configuration.Save();
+                            }
+                        }
+                        
+                        ImGui.EndPopup();
+                    }
+                }
+            }
+
+            ImGui.EndTable();
+        }
+    }
+
+    private void DrawCurrencyTableForIndividualMember(Models.RaidMember member)
+    {
+        if (ImGui.BeginTable("IndividualCurrencyTable", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+        {
+            // Setup columns
+            ImGui.TableSetupColumn("Currency", ImGuiTableColumnFlags.WidthFixed, 100);
+            ImGui.TableSetupColumn("Floor 1", ImGuiTableColumnFlags.WidthFixed, 45);
+            ImGui.TableSetupColumn("Floor 2", ImGuiTableColumnFlags.WidthFixed, 45);
+            ImGui.TableSetupColumn("Floor 3", ImGuiTableColumnFlags.WidthFixed, 45);
+            ImGui.TableSetupColumn("Floor 4", ImGuiTableColumnFlags.WidthFixed, 45);
+
+            // Header row
+            ImGui.TableHeadersRow();
+
+            // Pages row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Pages");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                int floorClears = member.FloorClears.ContainsKey(floor) ? member.FloorClears[floor] : 0;
+                int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
+                int totalPages = member.PagesEarned + floorClears + pageAdjustment;
+                ImGui.Text(totalPages.ToString());
+            }
+
+            // Pages Needed row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Pages Needed");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                int pagesNeeded = CalculatePagesNeededForFloor(member, floor);
+                int floorClears = member.FloorClears.ContainsKey(floor) ? member.FloorClears[floor] : 0;
+                int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
+                int totalPages = member.PagesEarned + floorClears + pageAdjustment;
+                int remainingPages = Math.Max(0, pagesNeeded - totalPages);
+                ImGui.Text(remainingPages.ToString());
+            }
+
+            ImGui.EndTable();
+        }
+    }
+
+    private void DrawMaterialsTableForIndividualMember(Models.RaidMember member)
+    {
+        if (ImGui.BeginTable("IndividualMaterialsTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+        {
+            // Setup columns
+            ImGui.TableSetupColumn("Materials", ImGuiTableColumnFlags.WidthFixed, 140);
+            ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 130);
+
+            // Header row
+            ImGui.TableHeadersRow();
+
+            // Glazes Needed row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Glazes Needed");
+            ImGui.TableSetColumnIndex(1);
+            int glazesNeeded = CalculateGlazesNeeded(member);
+            ImGui.Text(glazesNeeded.ToString());
+
+            // Twines Needed row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Twines Needed");
+            ImGui.TableSetColumnIndex(1);
+            int twinesNeeded = CalculateTwinesNeeded(member);
+            ImGui.Text(twinesNeeded.ToString());
+
+            ImGui.EndTable();
         }
     }
 
