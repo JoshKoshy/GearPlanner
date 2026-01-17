@@ -277,15 +277,11 @@ public class MainWindow : Window, IDisposable
         ImGui.Separator();
         ImGui.Spacing();
 
-        // Use columns to layout team info on left and member tables on right
-        ImGui.Columns(2, "TeamLayout", false);
-        ImGui.SetColumnWidth(0, 200);
-
-        // Left column - Team info
+        // Team name
         ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Team:");
         ImGui.SameLine(0, 5);
         string teamName = team.Name;
-        ImGui.SetNextItemWidth(130);
+        ImGui.SetNextItemWidth(200);
         if (ImGui.InputText("##TeamName", ref teamName, 100, ImGuiInputTextFlags.EnterReturnsTrue))
         {
             team.Name = teamName;
@@ -296,51 +292,7 @@ public class MainWindow : Window, IDisposable
         ImGui.Separator();
         ImGui.Spacing();
 
-        // Floor clears section
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
-        ImGui.Text("Floor 1:");
-        ImGui.SameLine(80);
-        ImGui.SetNextItemWidth(80);
-        int floor1Clears = team.Floor1Clears;
-        if (ImGui.InputInt("##Floor1Clears", ref floor1Clears, 1, 5))
-        {
-            team.Floor1Clears = floor1Clears;
-            plugin.Configuration.Save();
-        }
-
-        ImGui.Text("Floor 2:");
-        ImGui.SameLine(80);
-        ImGui.SetNextItemWidth(80);
-        int floor2Clears = team.Floor2Clears;
-        if (ImGui.InputInt("##Floor2Clears", ref floor2Clears, 1, 5))
-        {
-            team.Floor2Clears = floor2Clears;
-            plugin.Configuration.Save();
-        }
-
-        ImGui.Text("Floor 3:");
-        ImGui.SameLine(80);
-        ImGui.SetNextItemWidth(80);
-        int floor3Clears = team.Floor3Clears;
-        if (ImGui.InputInt("##Floor3Clears", ref floor3Clears, 1, 5))
-        {
-            team.Floor3Clears = floor3Clears;
-            plugin.Configuration.Save();
-        }
-
-        ImGui.Text("Floor 4:");
-        ImGui.SameLine(80);
-        ImGui.SetNextItemWidth(80);
-        int floor4Clears = team.Floor4Clears;
-        if (ImGui.InputInt("##Floor4Clears", ref floor4Clears, 1, 5))
-        {
-            team.Floor4Clears = floor4Clears;
-            plugin.Configuration.Save();
-        }
-
-        ImGui.NextColumn();
-
-        // Right column - Member tables in a child window
+        // Member tables and legend in a child window
         var availableWidth = ImGui.GetContentRegionAvail().X;
         float legendMinWidth = 330f;
         float memberTableWidth = availableWidth - legendMinWidth;
@@ -355,6 +307,52 @@ public class MainWindow : Window, IDisposable
             DrawMemberSection(team.Members, team);
 
             ImGui.NextColumn();
+
+            // Floor clears section - above legend
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
+            ImGui.Text("Floor 1:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(80);
+            int floor1Clears = team.Floor1Clears;
+            if (ImGui.InputInt("##Floor1Clears", ref floor1Clears, 1, 5))
+            {
+                team.Floor1Clears = floor1Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Text("Floor 2:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(80);
+            int floor2Clears = team.Floor2Clears;
+            if (ImGui.InputInt("##Floor2Clears", ref floor2Clears, 1, 5))
+            {
+                team.Floor2Clears = floor2Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Text("Floor 3:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(80);
+            int floor3Clears = team.Floor3Clears;
+            if (ImGui.InputInt("##Floor3Clears", ref floor3Clears, 1, 5))
+            {
+                team.Floor3Clears = floor3Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Text("Floor 4:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(80);
+            int floor4Clears = team.Floor4Clears;
+            if (ImGui.InputInt("##Floor4Clears", ref floor4Clears, 1, 5))
+            {
+                team.Floor4Clears = floor4Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
 
             // Right - Legend in a separate child window
             if (ImGui.BeginChild("LegendChild", new Vector2(-1, -1), true))
@@ -462,8 +460,6 @@ public class MainWindow : Window, IDisposable
             ImGui.Columns(1);
             ImGui.EndChild();
         }
-        
-        ImGui.Columns(1);
     }
 
     private void DrawMemberSection(List<Models.RaidMember> members, Models.RaidTeam team)
