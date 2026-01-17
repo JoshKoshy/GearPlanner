@@ -243,7 +243,7 @@ public class MainWindow : Window, IDisposable
                 
                 ImGui.Spacing();
                 
-                DrawCurrencyTableForIndividualMember(member);
+                DrawCurrencyTableForIndividualMember(member, currentSheet);
                 
                 ImGui.Spacing();
                 
@@ -258,7 +258,7 @@ public class MainWindow : Window, IDisposable
             ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
             ImGui.Text("Floor 1:");
             ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(50);
+            ImGui.SetNextItemWidth(80);
             int floor1Clears = currentSheet.Floor1Clears;
             if (ImGui.InputInt("##IndividualFloor1Clears", ref floor1Clears, 1, 5))
             {
@@ -268,7 +268,7 @@ public class MainWindow : Window, IDisposable
 
             ImGui.Text("Floor 2:");
             ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(50);
+            ImGui.SetNextItemWidth(80);
             int floor2Clears = currentSheet.Floor2Clears;
             if (ImGui.InputInt("##IndividualFloor2Clears", ref floor2Clears, 1, 5))
             {
@@ -278,7 +278,7 @@ public class MainWindow : Window, IDisposable
 
             ImGui.Text("Floor 3:");
             ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(50);
+            ImGui.SetNextItemWidth(80);
             int floor3Clears = currentSheet.Floor3Clears;
             if (ImGui.InputInt("##IndividualFloor3Clears", ref floor3Clears, 1, 5))
             {
@@ -288,7 +288,7 @@ public class MainWindow : Window, IDisposable
 
             ImGui.Text("Floor 4:");
             ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(50);
+            ImGui.SetNextItemWidth(80);
             int floor4Clears = currentSheet.Floor4Clears;
             if (ImGui.InputInt("##IndividualFloor4Clears", ref floor4Clears, 1, 5))
             {
@@ -1461,7 +1461,7 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    private void DrawCurrencyTableForIndividualMember(Models.RaidMember member)
+    private void DrawCurrencyTableForIndividualMember(Models.RaidMember member, Models.GearSheet sheet)
     {
         if (ImGui.BeginTable("IndividualCurrencyTable", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
         {
@@ -1482,7 +1482,12 @@ public class MainWindow : Window, IDisposable
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
-                int floorClears = member.FloorClears.ContainsKey(floor) ? member.FloorClears[floor] : 0;
+                int floorClears = 0;
+                if (floor == 1) floorClears = sheet.Floor1Clears;
+                else if (floor == 2) floorClears = sheet.Floor2Clears;
+                else if (floor == 3) floorClears = sheet.Floor3Clears;
+                else if (floor == 4) floorClears = sheet.Floor4Clears;
+                
                 int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
                 int totalPages = member.PagesEarned + floorClears + pageAdjustment;
                 ImGui.Text(totalPages.ToString());
@@ -1495,8 +1500,13 @@ public class MainWindow : Window, IDisposable
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
+                int floorClears = 0;
+                if (floor == 1) floorClears = sheet.Floor1Clears;
+                else if (floor == 2) floorClears = sheet.Floor2Clears;
+                else if (floor == 3) floorClears = sheet.Floor3Clears;
+                else if (floor == 4) floorClears = sheet.Floor4Clears;
+                
                 int pagesNeeded = CalculatePagesNeededForFloor(member, floor);
-                int floorClears = member.FloorClears.ContainsKey(floor) ? member.FloorClears[floor] : 0;
                 int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
                 int totalPages = member.PagesEarned + floorClears + pageAdjustment;
                 int remainingPages = Math.Max(0, pagesNeeded - totalPages);
