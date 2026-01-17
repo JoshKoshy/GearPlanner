@@ -14,6 +14,8 @@ public class Configuration : IPluginConfiguration
     public bool IsMainWindowMovable { get; set; } = true;
     public List<RaidTeam> RaidTeams { get; set; } = new();
     public int SelectedTeamIndex { get; set; } = -1;
+    public List<GearSheet> IndividualTabSheets { get; set; } = new();
+    public int IndividualTabSelectedSheetIndex { get; set; } = -1;
 
     // The below exists just to make saving less cumbersome
     public void Save()

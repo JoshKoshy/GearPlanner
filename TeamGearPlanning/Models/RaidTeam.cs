@@ -9,19 +9,61 @@ public class RaidTeam
 {
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
-    public List<RaidMember> Members { get; set; } = new();
+    public List<GearSheet> Sheets { get; set; } = new();
+    public int SelectedSheetIndex { get; set; } = 0;
     public DateTime CreatedDate { get; set; } = DateTime.Now;
     public int TierNumber { get; set; } = 0; // Arcadion tier 1-4
-    public int Floor1Clears { get; set; } = 0;
-    public int Floor2Clears { get; set; } = 0;
-    public int Floor3Clears { get; set; } = 0;
-    public int Floor4Clears { get; set; } = 0;
     
-    public RaidTeam() { }
+    // Convenience properties for backward compatibility and default sheet access
+    public List<RaidMember> Members
+    {
+        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Members : new();
+        set
+        {
+            if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count)
+            {
+                Sheets[SelectedSheetIndex].Members = value;
+            }
+        }
+    }
+
+    public int Floor1Clears
+    {
+        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Floor1Clears : 0;
+        set { if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count) Sheets[SelectedSheetIndex].Floor1Clears = value; }
+    }
+
+    public int Floor2Clears
+    {
+        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Floor2Clears : 0;
+        set { if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count) Sheets[SelectedSheetIndex].Floor2Clears = value; }
+    }
+
+    public int Floor3Clears
+    {
+        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Floor3Clears : 0;
+        set { if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count) Sheets[SelectedSheetIndex].Floor3Clears = value; }
+    }
+
+    public int Floor4Clears
+    {
+        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Floor4Clears : 0;
+        set { if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count) Sheets[SelectedSheetIndex].Floor4Clears = value; }
+    }
+    
+    public RaidTeam() 
+    {
+        // Initialize with default Main sheet
+        Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
+        SelectedSheetIndex = 0;
+    }
     
     public RaidTeam(string name)
     {
         Name = name;
+        // Initialize with default Main sheet
+        Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
+        SelectedSheetIndex = 0;
     }
     
     public void AddMember(RaidMember member)

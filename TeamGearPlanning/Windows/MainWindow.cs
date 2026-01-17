@@ -19,7 +19,9 @@ public class MainWindow : Window, IDisposable
     private Dictionary<int, int> memberBiSSetIndex = new(); // Store selected BiS set index per member
     private int selectedTab = 1; // 0=Individual, 1=Team, 2=Loot Planner, 3=Who Needs it?
     private readonly string[] tabNames = { "Individual", "Team", "Loot Planner", "Who Needs it?" };
-    private Models.RaidMember? individualTabMember; // Persistent member for Individual tab
+    private List<Models.GearSheet> individualTabSheets = new(); // Sheets for Individual tab
+    private int individualTabSelectedSheetIndex = 0;
+    private Dictionary<int, string> individualSheetRenameInput = new(); // Store rename input per sheet
 
     public MainWindow(Plugin plugin)
         : base("Team Gear Planning##MainWindow")
@@ -88,171 +90,222 @@ public class MainWindow : Window, IDisposable
 
     private void DrawIndividualTab()
     {
-        // Initialize persistent member if needed
-        if (individualTabMember == null)
+        // Load sheets from configuration if not already loaded
+        if (individualTabSheets.Count == 0 && plugin.Configuration.IndividualTabSheets.Count > 0)
         {
-            individualTabMember = new Models.RaidMember("Player Name", "Paladin", Models.JobRole.Tank);
-            individualTabMember.InitializeGear();
-        }
-
-        var member = individualTabMember;
-
-        // Use columns to layout Floor Clears on left and member section on right
-        ImGui.Columns(2, "IndividualLayout", false);
-        ImGui.SetColumnWidth(0, 150);
-
-        // Left column - Floor Clears
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
-        ImGui.Text("Floor 1:");
-        ImGui.SameLine(80);
-        ImGui.SetNextItemWidth(50);
-        int floor1Clears = member.FloorClears.ContainsKey(1) ? member.FloorClears[1] : 0;
-        if (ImGui.InputInt("##IndividualFloor1Clears", ref floor1Clears, 1, 5))
-        {
-            member.FloorClears[1] = floor1Clears;
-            plugin.Configuration.Save();
-        }
-
-        ImGui.Text("Floor 2:");
-        ImGui.SameLine(80);
-        ImGui.SetNextItemWidth(50);
-        int floor2Clears = member.FloorClears.ContainsKey(2) ? member.FloorClears[2] : 0;
-        if (ImGui.InputInt("##IndividualFloor2Clears", ref floor2Clears, 1, 5))
-        {
-            member.FloorClears[2] = floor2Clears;
-            plugin.Configuration.Save();
-        }
-
-        ImGui.Text("Floor 3:");
-        ImGui.SameLine(80);
-        ImGui.SetNextItemWidth(50);
-        int floor3Clears = member.FloorClears.ContainsKey(3) ? member.FloorClears[3] : 0;
-        if (ImGui.InputInt("##IndividualFloor3Clears", ref floor3Clears, 1, 5))
-        {
-            member.FloorClears[3] = floor3Clears;
-            plugin.Configuration.Save();
-        }
-
-        ImGui.Text("Floor 4:");
-        ImGui.SameLine(80);
-        ImGui.SetNextItemWidth(50);
-        int floor4Clears = member.FloorClears.ContainsKey(4) ? member.FloorClears[4] : 0;
-        if (ImGui.InputInt("##IndividualFloor4Clears", ref floor4Clears, 1, 5))
-        {
-            member.FloorClears[4] = floor4Clears;
-            plugin.Configuration.Save();
-        }
-
-        ImGui.NextColumn();
-
-        // Right column - Member section
-        if (ImGui.BeginChild("IndividualMemberSection", new System.Numerics.Vector2(350, 590), true))
-        {
-            // Member name - editable
-            string name = member.Name;
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.InputText("##IndividualCharName", ref name, 50, ImGuiInputTextFlags.EnterReturnsTrue))
-            {
-                member.Name = name;
-                plugin.Configuration.Save();
-            }
+            individualTabSheets = plugin.Configuration.IndividualTabSheets;
+            individualTabSelectedSheetIndex = plugin.Configuration.IndividualTabSelectedSheetIndex;
+            if (individualTabSelectedSheetIndex < 0 || individualTabSelectedSheetIndex >= individualTabSheets.Count)
+                individualTabSelectedSheetIndex = 0;
             
-            // Job dropdown
-            int currentJobIdx = System.Array.IndexOf(jobOptions, member.Job);
-            if (currentJobIdx < 0) currentJobIdx = 0;
-            
-            ImGui.SetNextItemWidth(-95);
-            if (ImGui.Combo("##IndividualJob", ref currentJobIdx, jobOptions))
+            // Apply defaults to all loaded sheets to ensure consistency
+            foreach (var sheet in individualTabSheets)
             {
-                member.Job = jobOptions[currentJobIdx];
-                var role = Helpers.FFXIVJobs.GetRoleForJob(member.Job);
-                if (role != Models.JobRole.Unknown)
+                foreach (var sheetMember in sheet.Members)
                 {
-                    member.Role = role;
+                    InitializeGearDefaults(sheetMember);
                 }
-                plugin.Configuration.Save();
             }
+        }
+        
+        // Initialize sheets if still needed
+        if (individualTabSheets.Count == 0)
+        {
+            var defaultMember = new Models.RaidMember("Player Name", "Paladin", Models.JobRole.Tank);
+            defaultMember.InitializeGear();
+            InitializeGearDefaults(defaultMember);
+            
+            individualTabSheets.Add(new Models.GearSheet("Main", new List<Models.RaidMember> { defaultMember }));
+            individualTabSelectedSheetIndex = 0;
+            plugin.Configuration.IndividualTabSheets = individualTabSheets;
+            plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
+            plugin.Configuration.Save();
+        }
 
-            // Import BiS button
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.Button("Import BiS", new Vector2(-1, 0)))
+        var currentSheet = individualTabSheets[individualTabSelectedSheetIndex];
+        var member = currentSheet.Members.Count > 0 ? currentSheet.Members[0] : null;
+        
+        if (member == null)
+        {
+            ImGui.Text("No member in this sheet");
+            return;
+        }
+
+        ImGui.Spacing();
+
+        // Member tables and legend in a child window  
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        float legendMinWidth = 330f;
+        float memberTableWidth = availableWidth - legendMinWidth;
+        
+        if (ImGui.BeginChild("IndividualMembersAndLegend", new Vector2(availableWidth, -1), false))
+        {
+            ImGui.Columns(2, "IndividualRightSection", false);
+            ImGui.SetColumnWidth(0, memberTableWidth);
+            ImGui.SetColumnWidth(1, legendMinWidth);
+            
+            // Left - Member section
+            float memberSectionWidth = System.Math.Min(memberTableWidth - 10, 350);
+            if (ImGui.BeginChild("IndividualMemberSection", new System.Numerics.Vector2(memberSectionWidth, 590), true))
             {
-                ImGui.OpenPopup("XivGearImportPopupIndividual");
-            }
-
-            // Sync Current Gear button
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.Button("Sync Current", new Vector2(-1, 0)))
-            {
-                Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
-                plugin.Configuration.Save();
-            }
-
-            // Import dialog for xivgear.app
-            if (ImGui.BeginPopupModal("XivGearImportPopupIndividual", ImGuiWindowFlags.AlwaysAutoResize))
-            {
-                ImGui.TextWrapped("Select a BiS set for this job:");
-                ImGui.Separator();
-
-                // Convert job name to abbreviation for lookup
-                var jobAbbr = Helpers.FFXIVJobs.GetJobAbbreviation(member.Job);
-                var bisSets = plugin.BiSLibrary.GetBiSSetsForJob(jobAbbr);
-                
-                if (bisSets.Count > 0)
+                // Member name - editable
+                string name = member.Name;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputText("##IndividualCharName", ref name, 50, ImGuiInputTextFlags.EnterReturnsTrue))
                 {
-                    if (!memberBiSSetIndex.ContainsKey(-1))
-                        memberBiSSetIndex[-1] = 0;
-
-                    var setNames = bisSets.Select(s => s.Name).ToArray();
-                    int selectedIndex = memberBiSSetIndex[-1];
-                    
-                    ImGui.SetNextItemWidth(300);
-                    if (ImGui.Combo("##BiSSetSelectIndividual", ref selectedIndex, setNames))
+                    member.Name = name;
+                    plugin.Configuration.Save();
+                }
+                
+                // Job dropdown
+                int currentJobIdx = System.Array.IndexOf(jobOptions, member.Job);
+                if (currentJobIdx < 0) currentJobIdx = 0;
+                
+                ImGui.SetNextItemWidth(-95);
+                if (ImGui.Combo("##IndividualJob", ref currentJobIdx, jobOptions))
+                {
+                    member.Job = jobOptions[currentJobIdx];
+                    var role = Helpers.FFXIVJobs.GetRoleForJob(member.Job);
+                    if (role != Models.JobRole.Unknown)
                     {
-                        memberBiSSetIndex[-1] = selectedIndex;
+                        member.Role = role;
                     }
+                    plugin.Configuration.Save();
+                }
 
-                    ImGui.Spacing();
+                // Import BiS button
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.Button("Import BiS", new Vector2(-1, 0)))
+                {
+                    ImGui.OpenPopup("XivGearImportPopupIndividual");
+                }
 
-                    if (ImGui.Button("Import", new Vector2(100, 0)))
+                // Sync Current Gear button
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.Button("Sync Current", new Vector2(-1, 0)))
+                {
+                    Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
+                    plugin.Configuration.Save();
+                }
+
+                // Import dialog for xivgear.app
+                if (ImGui.BeginPopupModal("XivGearImportPopupIndividual", ImGuiWindowFlags.AlwaysAutoResize))
+                {
+                    ImGui.TextWrapped("Select a BiS set for this job:");
+                    ImGui.Separator();
+
+                    // Convert job name to abbreviation for lookup
+                    var jobAbbr = Helpers.FFXIVJobs.GetJobAbbreviation(member.Job);
+                    var bisSets = plugin.BiSLibrary.GetBiSSetsForJob(jobAbbr);
+                    
+                    if (bisSets.Count > 0)
                     {
-                        if (selectedIndex >= 0 && selectedIndex < bisSets.Count)
+                        if (!memberBiSSetIndex.ContainsKey(-1))
+                            memberBiSSetIndex[-1] = 0;
+
+                        var setNames = bisSets.Select(s => s.Name).ToArray();
+                        int selectedIndex = memberBiSSetIndex[-1];
+                        
+                        ImGui.SetNextItemWidth(300);
+                        if (ImGui.Combo("##BiSSetSelectIndividual", ref selectedIndex, setNames))
                         {
-                            ImportBiSSet(member, bisSets[selectedIndex]);
-                            ImGui.CloseCurrentPopup();
+                            memberBiSSetIndex[-1] = selectedIndex;
+                        }
+
+                        ImGui.Spacing();
+
+                        if (ImGui.Button("Import", new Vector2(100, 0)))
+                        {
+                            if (selectedIndex >= 0 && selectedIndex < bisSets.Count)
+                            {
+                                ImportBiSSet(member, bisSets[selectedIndex]);
+                                ImGui.CloseCurrentPopup();
+                            }
                         }
                     }
-                }
-                else
-                {
-                    ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"No BiS sets available for {member.Job}");
-                }
+                    else
+                    {
+                        ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"No BiS sets available for {member.Job}");
+                    }
 
-                ImGui.SameLine();
-                if (ImGui.Button("Cancel", new Vector2(100, 0)))
-                {
-                    ImGui.CloseCurrentPopup();
-                }
+                    ImGui.SameLine();
+                    if (ImGui.Button("Cancel", new Vector2(100, 0)))
+                    {
+                        ImGui.CloseCurrentPopup();
+                    }
 
-                ImGui.EndPopup();
+                    ImGui.EndPopup();
+                }
+                
+                ImGui.Spacing();
+                
+                DrawGearTableForIndividualMember(member);
+                
+                ImGui.Spacing();
+                
+                DrawCurrencyTableForIndividualMember(member);
+                
+                ImGui.Spacing();
+                
+                DrawMaterialsTableForIndividualMember(member);
+                
+                ImGui.EndChild();
             }
             
+            ImGui.NextColumn();
+
+            // Right column - Floor Clears and Legend
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
+            ImGui.Text("Floor 1:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(50);
+            int floor1Clears = currentSheet.Floor1Clears;
+            if (ImGui.InputInt("##IndividualFloor1Clears", ref floor1Clears, 1, 5))
+            {
+                currentSheet.Floor1Clears = floor1Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Text("Floor 2:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(50);
+            int floor2Clears = currentSheet.Floor2Clears;
+            if (ImGui.InputInt("##IndividualFloor2Clears", ref floor2Clears, 1, 5))
+            {
+                currentSheet.Floor2Clears = floor2Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Text("Floor 3:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(50);
+            int floor3Clears = currentSheet.Floor3Clears;
+            if (ImGui.InputInt("##IndividualFloor3Clears", ref floor3Clears, 1, 5))
+            {
+                currentSheet.Floor3Clears = floor3Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Text("Floor 4:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(50);
+            int floor4Clears = currentSheet.Floor4Clears;
+            if (ImGui.InputInt("##IndividualFloor4Clears", ref floor4Clears, 1, 5))
+            {
+                currentSheet.Floor4Clears = floor4Clears;
+                plugin.Configuration.Save();
+            }
+
             ImGui.Spacing();
-            
-            DrawGearTableForIndividualMember(member);
-            
+            ImGui.Separator();
             ImGui.Spacing();
-            
-            DrawCurrencyTableForIndividualMember(member);
-            
-            ImGui.Spacing();
-            
-            DrawMaterialsTableForIndividualMember(member);
-            
+
+            // Legend section
+            DrawLegendForIndividualTab();
+
+            ImGui.Columns(1);
             ImGui.EndChild();
         }
-
-        ImGui.Columns(1);
     }
 
     private void DrawTeamTab()
@@ -286,6 +339,65 @@ public class MainWindow : Window, IDisposable
         {
             team.Name = teamName;
             plugin.Configuration.Save();
+        }
+
+        // Sheet selection buttons
+        ImGui.SameLine(320, 10);
+
+        // Sheet buttons
+        for (int i = 0; i < team.Sheets.Count; i++)
+        {
+            if (i > 0) ImGui.SameLine(0, 5);
+            
+            var sheetName = team.Sheets[i].Name;
+            bool isSelected = team.SelectedSheetIndex == i;
+            
+            if (isSelected)
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.0f, 0.5f, 1.0f, 1.0f));
+            
+            if (ImGui.Button(sheetName, new Vector2(60, 0)))
+            {
+                team.SelectedSheetIndex = i;
+                plugin.Configuration.Save();
+            }
+            
+            if (isSelected)
+                ImGui.PopStyleColor();
+        }
+
+        // Add new sheet button
+        ImGui.SameLine(0, 5);
+        if (ImGui.Button("+", new Vector2(25, 0)))
+        {
+            int altNumber = team.Sheets.Count; // Main is 0, Alt 1 is 1, Alt 2 is 2, etc.
+            string newSheetName = altNumber == 0 ? "Main" : $"Alt {altNumber}";
+            
+            // Create new sheet with copy of current members
+            var newMembers = new List<Models.RaidMember>();
+            foreach (var member in team.Members)
+            {
+                var newMember = new Models.RaidMember(member.Name, member.Job, member.Role);
+                newMember.InitializeGear();
+                InitializeGearDefaults(newMember);
+                newMembers.Add(newMember);
+            }
+            
+            team.Sheets.Add(new Models.GearSheet(newSheetName, newMembers));
+            team.SelectedSheetIndex = team.Sheets.Count - 1;
+            plugin.Configuration.Save();
+        }
+
+        // Remove sheet button (only if more than one sheet)
+        if (team.Sheets.Count > 1)
+        {
+            ImGui.SameLine(0, 5);
+            if (ImGui.Button("X", new Vector2(25, 0)))
+            {
+                team.Sheets.RemoveAt(team.SelectedSheetIndex);
+                if (team.SelectedSheetIndex >= team.Sheets.Count)
+                    team.SelectedSheetIndex = team.Sheets.Count - 1;
+                plugin.Configuration.Save();
+            }
         }
 
         ImGui.Spacing();
@@ -1426,4 +1538,54 @@ public class MainWindow : Window, IDisposable
         }
     }
 
+    private void InitializeGearDefaults(Models.RaidMember member)
+    {
+        foreach (var gear in member.Gear.Values)
+        {
+            gear.DesiredStatus = Models.GearStatus.BiS;
+            gear.CurrentStatus = Models.GearStatus.LowIlvl;
+            gear.Source = Models.GearSource.None;
+            
+            // Set specific desired source defaults
+            if (gear.Slot == Models.GearSlot.MainHand)
+            {
+                gear.DesiredSource = Models.GearSource.Savage;
+            }
+            else if (gear.Slot == Models.GearSlot.Ring1)
+            {
+                gear.DesiredSource = Models.GearSource.TomeUp;
+            }
+            else if (gear.Slot == Models.GearSlot.Ring2)
+            {
+                gear.DesiredSource = Models.GearSource.Savage;
+            }
+            else
+            {
+                gear.DesiredSource = Models.GearSource.None;
+            }
+        }
+    }
+
+    private void DrawLegendForIndividualTab()
+    {
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Legend:");
+        ImGui.TextColored(new Vector4(0.0f, 0.8f, 0.0f, 1.0f), "BiS");
+        ImGui.TextColored(new Vector4(0.0f, 0.8f, 0.0f, 1.0f), "Drop from Savage raid.");
+        ImGui.TextColored(new Vector4(0.2f, 0.8f, 1.0f, 1.0f), "Tome Up");
+        ImGui.TextColored(new Vector4(0.2f, 0.8f, 1.0f, 1.0f), "Tome upgraded crafted gear.");
+        ImGui.TextColored(new Vector4(0.8f, 0.6f, 0.0f, 1.0f), "Crafted");
+        ImGui.TextColored(new Vector4(0.8f, 0.6f, 0.0f, 1.0f), "Handcrafted gear.");
+        ImGui.TextColored(new Vector4(0.8f, 0.0f, 0.8f, 1.0f), "Tome");
+        ImGui.TextColored(new Vector4(0.8f, 0.0f, 0.8f, 1.0f), "Non-upgraded capped tome gear.");
+        ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.0f, 1.0f), "Prep");
+        ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.0f, 1.0f), "Placeholder for early raids.");
+        ImGui.TextColored(new Vector4(0.5f, 0.5f, 0.5f, 1.0f), "Weapon IM");
+        ImGui.TextColored(new Vector4(0.5f, 0.5f, 0.5f, 1.0f), "Drops from EX normal raid, etc.");
+        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Tome Up");
+        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Tome upgraded higher ilvl gear.");
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Crafted");
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Crafter-crafted current expansion gear.");
+        ImGui.TextColored(new Vector4(0.0f, 0.0f, 1.0f, 1.0f), "You can't realistically considering raiding with");
+        ImGui.TextColored(new Vector4(0.0f, 0.0f, 1.0f, 1.0f), "this gear. [Doesn't apply]");
+    }
 }
