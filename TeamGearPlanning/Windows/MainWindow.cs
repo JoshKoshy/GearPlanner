@@ -29,6 +29,7 @@ public class MainWindow : Window, IDisposable
     private Dictionary<string, int> lootPlannerAssignments = new(); // Track loot assignments by loot name -> member index
     private List<string> lootPlannerWeeks = new() { "Week 1" }; // List of weeks for loot planning
     private int lootPlannerSelectedWeekIndex = 0; // Currently selected week
+    private Dictionary<string, bool> whoNeedsItCheckboxes = new(); // Track checkbox states for Who Needs It tab
 
     public MainWindow(Plugin plugin)
         : base("Team Gear Planning##MainWindow")
@@ -90,7 +91,7 @@ public class MainWindow : Window, IDisposable
                 break;
 
             case 3: // Who Needs it? tab
-                ImGui.Text("Who Needs it? tab - Coming soon");
+                DrawWhoNeedsItTab();
                 break;
 
             case 4: // Legend tab
@@ -1955,6 +1956,159 @@ public class MainWindow : Window, IDisposable
                         lootPlannerAssignments[lootKey] = selectedMember;
                     }
                 }
+            }
+
+            ImGui.EndTable();
+        }
+    }
+
+    private void DrawWhoNeedsItTab()
+    {
+        if (plugin.Configuration.RaidTeams.Count == 0)
+        {
+            ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.0f, 1.0f), "No raid teams configured.");
+            ImGui.Text("Use /tgp config to create a team or edit the sample team.");
+            return;
+        }
+
+        var selectedTeamIndex = plugin.Configuration.SelectedTeamIndex;
+        if (selectedTeamIndex < 0 || selectedTeamIndex >= plugin.Configuration.RaidTeams.Count)
+        {
+            selectedTeamIndex = 0;
+            plugin.Configuration.SelectedTeamIndex = 0;
+        }
+
+        var team = plugin.Configuration.RaidTeams[selectedTeamIndex];
+
+        ImGui.Spacing();
+
+        // Team selector
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Select Team:");
+        ImGui.SameLine(0, 5);
+
+        var teamNames = plugin.Configuration.RaidTeams.Select(t => t.Name).ToArray();
+        int selectedTeamIndexLocal = selectedTeamIndex;
+        ImGui.SetNextItemWidth(150);
+        if (ImGui.Combo("##WhoNeedsItTeamSelector", ref selectedTeamIndexLocal, teamNames))
+        {
+            plugin.Configuration.SelectedTeamIndex = selectedTeamIndexLocal;
+            plugin.Configuration.Save();
+            team = plugin.Configuration.RaidTeams[selectedTeamIndexLocal];
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // Get all gear slots
+        var gearSlots = System.Enum.GetNames(typeof(Models.GearSlot));
+
+        // Create table with gear slots as rows and members as columns
+        int columnCount = team.Members.Count + 1; // +1 for gear slot name column
+        if (ImGui.BeginTable("WhoNeedsIt", columnCount, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+        {
+            // Setup columns - first column for gear slot names, rest for members
+            ImGui.TableSetupColumn("Gear Slot", ImGuiTableColumnFlags.WidthFixed, 120);
+            foreach (var member in team.Members)
+            {
+                ImGui.TableSetupColumn(member.Name, ImGuiTableColumnFlags.WidthFixed, 100);
+            }
+
+            ImGui.TableHeadersRow();
+
+            // Display each gear slot
+            foreach (var slotName in gearSlots)
+            {
+                ImGui.TableNextRow();
+
+                // Gear slot name column
+                ImGui.TableSetColumnIndex(0);
+                ImGui.Text(FormatSlotName(slotName));
+
+                // Member columns with checkboxes
+                for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
+                {
+                    ImGui.TableSetColumnIndex(memberIdx + 1);
+
+                    var member = team.Members[memberIdx];
+
+                    // Check if member desires Savage gear for this slot
+                    if (member.Gear.TryGetValue(slotName, out var gearPiece))
+                    {
+                        if (gearPiece.DesiredSource == Models.GearSource.Savage)
+                        {
+                            // Create unique key for checkbox
+                            string checkboxKey = $"WhoNeedsIt_{memberIdx}_{slotName}";
+
+                            // Initialize checkbox state if not exists
+                            if (!whoNeedsItCheckboxes.ContainsKey(checkboxKey))
+                            {
+                                // Set checkbox to true if they already have it
+                                whoNeedsItCheckboxes[checkboxKey] = (gearPiece.Source == Models.GearSource.Savage);
+                            }
+
+                            bool isChecked = whoNeedsItCheckboxes[checkboxKey];
+                            if (isChecked)
+                            {
+                                ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "HAVE");
+                            }
+                            else
+                            {
+                                ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "NEED");
+                            }
+                        }
+                        // If they don't desire Savage gear, show nothing
+                    }
+                }
+            }
+
+            // Add summary rows below gear slots
+            ImGui.Spacing();
+
+            // Pages Needed by floor rows
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableSetColumnIndex(0);
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), $"Floor {floor} Pages");
+
+                for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
+                {
+                    ImGui.TableSetColumnIndex(memberIdx + 1);
+                    var member = team.Members[memberIdx];
+                    int pagesNeeded = CalculatePagesNeededForFloor(member, floor);
+                    int pagesFromClears = GetPagesFromClears(team, floor);
+                    int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
+                    int totalPages = pagesFromClears + pageAdjustment;
+                    int remainingPages = Math.Max(0, pagesNeeded - totalPages);
+                    ImGui.Text(remainingPages.ToString());
+                }
+            }
+
+            // Glazes Needed row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Glazes Needed");
+
+            for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
+            {
+                ImGui.TableSetColumnIndex(memberIdx + 1);
+                var member = team.Members[memberIdx];
+                int glazesNeeded = CalculateGlazesNeeded(member);
+                ImGui.Text(glazesNeeded.ToString());
+            }
+
+            // Twines Needed row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Twines Needed");
+
+            for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
+            {
+                ImGui.TableSetColumnIndex(memberIdx + 1);
+                var member = team.Members[memberIdx];
+                int twinesNeeded = CalculateTwinesNeeded(member);
+                ImGui.Text(twinesNeeded.ToString());
             }
 
             ImGui.EndTable();
