@@ -180,11 +180,17 @@ public class MainWindow : Window, IDisposable
                     ImGui.OpenPopup("XivGearImportPopupIndividual");
                 }
 
-                // Sync Current Gear button
+                // Sync buttons
                 ImGui.SetNextItemWidth(-1);
-                if (ImGui.Button("Sync Current", new Vector2(-1, 0)))
+                if (ImGui.Button("Sync Current", new Vector2((ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2, 0)))
                 {
                     Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
+                    plugin.Configuration.Save();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Sync Target", new Vector2(-1, 0)))
+                {
+                    Helpers.EquipmentReader.SyncTargetEquipmentToMember(member, Plugin.GameInventory);
                     plugin.Configuration.Save();
                 }
 
@@ -254,7 +260,85 @@ public class MainWindow : Window, IDisposable
             
             ImGui.NextColumn();
 
-            // Right column - Floor Clears and Legend
+            // Right column - Sheet selection, renaming, Floor Clears and Legend
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Sheet:");
+            ImGui.SameLine(0, 5);
+
+            // Sheet buttons
+            for (int i = 0; i < individualTabSheets.Count; i++)
+            {
+                if (i > 0) ImGui.SameLine(0, 5);
+                
+                var sheetName = individualTabSheets[i].Name;
+                bool isSelected = individualTabSelectedSheetIndex == i;
+                
+                if (isSelected)
+                    ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.0f, 0.5f, 1.0f, 1.0f));
+                
+                if (ImGui.Button(sheetName, new Vector2(60, 0)))
+                {
+                    individualTabSelectedSheetIndex = i;
+                    plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
+                    plugin.Configuration.Save();
+                }
+                
+                if (isSelected)
+                    ImGui.PopStyleColor();
+            }
+
+            // Add new sheet button
+            ImGui.SameLine(0, 5);
+            if (ImGui.Button("+", new Vector2(25, 0)))
+            {
+                var newMember = new Models.RaidMember("Player Name", "Paladin", Models.JobRole.Tank);
+                newMember.InitializeGear();
+                InitializeGearDefaults(newMember);
+                
+                string newSheetName = $"Sheet {individualTabSheets.Count}";
+                individualTabSheets.Add(new Models.GearSheet(newSheetName, new List<Models.RaidMember> { newMember }));
+                individualTabSelectedSheetIndex = individualTabSheets.Count - 1;
+                plugin.Configuration.IndividualTabSheets = individualTabSheets;
+                plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
+                plugin.Configuration.Save();
+            }
+
+            // Remove sheet button (only if more than one sheet)
+            if (individualTabSheets.Count > 1)
+            {
+                ImGui.SameLine(0, 5);
+                if (ImGui.Button("X", new Vector2(25, 0)))
+                {
+                    individualTabSheets.RemoveAt(individualTabSelectedSheetIndex);
+                    if (individualTabSelectedSheetIndex >= individualTabSheets.Count)
+                        individualTabSelectedSheetIndex = individualTabSheets.Count - 1;
+                    plugin.Configuration.IndividualTabSheets = individualTabSheets;
+                    plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
+                    plugin.Configuration.Save();
+                }
+            }
+
+            ImGui.Spacing();
+
+            // Sheet rename input
+            if (!individualSheetRenameInput.ContainsKey(individualTabSelectedSheetIndex))
+                individualSheetRenameInput[individualTabSelectedSheetIndex] = currentSheet.Name;
+
+            string sheetNameInput = individualSheetRenameInput[individualTabSelectedSheetIndex];
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Sheet Name:");
+            ImGui.SameLine(90);
+            ImGui.SetNextItemWidth(200);
+            if (ImGui.InputText("##IndividualSheetName", ref sheetNameInput, 50))
+            {
+                individualSheetRenameInput[individualTabSelectedSheetIndex] = sheetNameInput;
+                currentSheet.Name = sheetNameInput;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+
+            // Floor Clears and Legend
             ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
             ImGui.Text("Floor 1:");
             ImGui.SameLine(80);
@@ -648,11 +732,16 @@ public class MainWindow : Window, IDisposable
                 ImGui.OpenPopup($"XivGearImportPopup{memberIdx}");
             }
 
-            // Sync Current Gear button
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.Button("Sync Current", new Vector2(-1, 0)))
+            // Sync buttons
+            if (ImGui.Button("Sync Current", new Vector2((ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2, 0)))
             {
                 Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
+                plugin.Configuration.Save();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Sync Target", new Vector2(-1, 0)))
+            {
+                Helpers.EquipmentReader.SyncTargetEquipmentToMember(member, Plugin.GameInventory);
                 plugin.Configuration.Save();
             }
 
@@ -1206,6 +1295,9 @@ public class MainWindow : Window, IDisposable
         if (biSSet.Items == null || biSSet.Items.Count == 0)
             return;
 
+        // Get the job code for validation
+        string jobCode = Helpers.FFXIVJobs.GetJobAbbreviation(member.Job);
+
         // Map each item in the BiS set to the member's gear
         foreach (var kvp in biSSet.Items)
         {
@@ -1217,6 +1309,15 @@ public class MainWindow : Window, IDisposable
 
             if (member.Gear.TryGetValue(internalSlot, out var gearPiece))
             {
+                // Validate that the job can equip this item before assigning
+                if (!Helpers.ItemDiscoveryHelper.CanJobEquipItemById((uint)biSItem.Id, jobCode, Plugin.DataManager))
+                {
+                    var skipItemLookup = Helpers.ItemDatabase.GetItemById((uint)biSItem.Id);
+                    string skipItemName = skipItemLookup?.Name ?? "Item";
+                    Plugin.Log.Debug($"Skipped BiS item for {member.Name} - {internalSlot}: Item ID {biSItem.Id} ({skipItemName}) cannot be equipped by {member.Job} ({jobCode})");
+                    continue;
+                }
+
                 // Detect the gear source from the item ID using IDataManager
                 var gearSource = Helpers.BiSLibrary.DetectGearSourceFromItemId(biSItem.Id);
                 gearPiece.DesiredSource = gearSource;

@@ -14,6 +14,12 @@ public class RaidTeam
     public DateTime CreatedDate { get; set; } = DateTime.Now;
     public int TierNumber { get; set; } = 0; // Arcadion tier 1-4
     
+    // Floor clears are team-wide, not per-sheet
+    public int Floor1Clears { get; set; } = 0;
+    public int Floor2Clears { get; set; } = 0;
+    public int Floor3Clears { get; set; } = 0;
+    public int Floor4Clears { get; set; } = 0;
+    
     // Convenience properties for backward compatibility and default sheet access
     public List<RaidMember> Members
     {
@@ -25,30 +31,6 @@ public class RaidTeam
                 Sheets[SelectedSheetIndex].Members = value;
             }
         }
-    }
-
-    public int Floor1Clears
-    {
-        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Floor1Clears : 0;
-        set { if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count) Sheets[SelectedSheetIndex].Floor1Clears = value; }
-    }
-
-    public int Floor2Clears
-    {
-        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Floor2Clears : 0;
-        set { if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count) Sheets[SelectedSheetIndex].Floor2Clears = value; }
-    }
-
-    public int Floor3Clears
-    {
-        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Floor3Clears : 0;
-        set { if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count) Sheets[SelectedSheetIndex].Floor3Clears = value; }
-    }
-
-    public int Floor4Clears
-    {
-        get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Floor4Clears : 0;
-        set { if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count) Sheets[SelectedSheetIndex].Floor4Clears = value; }
     }
     
     public RaidTeam() 

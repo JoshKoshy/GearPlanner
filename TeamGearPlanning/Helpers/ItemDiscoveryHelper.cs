@@ -13,6 +13,8 @@ namespace TeamGearPlanning.Helpers;
 /// </summary>
 public static class ItemDiscoveryHelper
 {
+    private static readonly HashSet<string> LoggedClassJobCategoryTypes = new();
+
     /// <summary>
     /// Discover all items matching a search pattern and extract their job associations.
     /// </summary>
@@ -77,6 +79,7 @@ public static class ItemDiscoveryHelper
 
     /// <summary>
     /// Get job associations directly from game data using ClassJobCategory.
+    /// Falls back to name-based detection if ClassJobCategory cannot be inspected.
     /// </summary>
     private static string[] GetJobsFromGameData(Item item, Dictionary<uint, string> jobCodeMap)
     {
@@ -88,6 +91,7 @@ public static class ItemDiscoveryHelper
             if (item.ClassJobCategory.RowId > 0)
             {
                 var classJobCategory = item.ClassJobCategory.Value;
+                bool foundAnyJobRestrictions = false;
                 
                 // Iterate through all jobs and check if they can equip this item
                 foreach (var kvp in jobCodeMap)
@@ -96,11 +100,22 @@ public static class ItemDiscoveryHelper
                     string jobCode = kvp.Value;
 
                     // Check if this specific job can equip the item
-                    if (CanJobEquipItem(classJobCategory, jobCode))
+                    // Only add if we successfully found a matching property (returns false only after property check)
+                    bool canEquip = CanJobEquipItemDirect(classJobCategory, jobCode);
+                    if (canEquip)
                     {
                         jobs.Add(jobCode);
+                        foundAnyJobRestrictions = true;
                     }
                 }
+                
+                // If we successfully found restrictions, return them
+                if (foundAnyJobRestrictions && jobs.Count > 0)
+                {
+                    return jobs.ToArray();
+                }
+                
+                // If we found a ClassJobCategory but couldn't parse it, fall through to name detection
             }
         }
         catch (Exception ex)
@@ -108,37 +123,132 @@ public static class ItemDiscoveryHelper
             Plugin.Log.Debug($"Error getting jobs from game data for item {item.RowId}: {ex.Message}");
         }
 
-        // Fall back to name-based detection if no jobs found
-        if (jobs.Count == 0)
-        {
-            return DetectJobsFromItemName(item.Name.ToString());
-        }
-
-        return jobs.ToArray();
+        // Fall back to name-based detection
+        var detectedJobs = DetectJobsFromItemName(item.Name.ToString());
+        return detectedJobs;
     }
 
     /// <summary>
     /// Check if a job can equip an item based on ClassJobCategory.
-    /// ClassJobCategory has boolean properties for each job abbreviation.
+    /// ClassJobCategory may have boolean properties for each job, named by job abbreviation or other formats.
+    /// Returns true if the job can equip it, or if we cannot determine (defaults to allowing).
     /// </summary>
-    private static bool CanJobEquipItem(ClassJobCategory classJobCategory, string jobCode)
+    /// <summary>
+    /// Check if a specific job can equip an item based on ClassJobCategory.
+    /// Returns false if the property is not found (not "default to true").
+    /// Only returns true if the property exists and is true.
+    /// </summary>
+    private static bool CanJobEquipItemDirect(ClassJobCategory classJobCategory, string jobCode)
     {
         try
         {
             var type = classJobCategory.GetType();
-            var property = type.GetProperty(jobCode, System.Reflection.BindingFlags.IgnoreCase | System.Reflection.BindingFlags.Public);
+            
+            // Look for property with the job code name (must include Instance flag)
+            var property = type.GetProperty(jobCode, System.Reflection.BindingFlags.IgnoreCase | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
             
             if (property != null && property.PropertyType == typeof(bool))
             {
                 var value = property.GetValue(classJobCategory);
-                return value is bool boolValue && boolValue;
+                bool result = value is bool boolValue && boolValue;
+                return result;
             }
             
+            // Property not found - return false (don't default to true)
             return false;
         }
-        catch
+        catch (Exception ex)
         {
+            Plugin.Log.Debug($"[CanJobEquipItemDirect] Exception for job '{jobCode}': {ex.Message}");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Check if a specific job can equip an item based on ClassJobCategory.
+    /// This is the old method used by CanJobEquipItemById - defaults to true on failure for lenient validation.
+    /// </summary>
+    public static bool CanJobEquipItem(ClassJobCategory classJobCategory, string jobCode)
+    {
+        try
+        {
+            var type = classJobCategory.GetType();
+            
+            // Look for property with the job code name (must include Instance flag)
+            var property = type.GetProperty(jobCode, System.Reflection.BindingFlags.IgnoreCase | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            
+            if (property != null && property.PropertyType == typeof(bool))
+            {
+                var value = property.GetValue(classJobCategory);
+                bool result = value is bool boolValue && boolValue;
+                Plugin.Log.Debug($"[CanJobEquipItem] Job '{jobCode}': {result}");
+                return result;
+            }
+            
+            // Property not found - default to allowing (lenient for items not in database)
+            Plugin.Log.Debug($"[CanJobEquipItem] Job '{jobCode}': Property not found, defaulting to allowed");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error($"[CanJobEquipItem] Exception for job '{jobCode}': {ex.Message}");
+            // Default to allowing on exception
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Check if a specific item can be equipped by a job using the ItemDatabase.
+    /// This is more reliable than ClassJobCategory inspection since ItemDatabase
+    /// already has job compatibility data populated from game discovery.
+    /// </summary>
+    public static bool CanJobEquipItemById(uint itemId, string jobCode, IDataManager dataManager)
+    {
+        try
+        {
+            // First, check ItemDatabase which has pre-populated job compatibility data
+            var dbItem = ItemDatabase.GetItemById(itemId);
+            if (dbItem != null && dbItem.Jobs != null && dbItem.Jobs.Length > 0)
+            {
+                // Item is in database with job data - check if this job can equip it
+                bool canEquip = dbItem.Jobs.Contains(jobCode);
+                Plugin.Log.Debug($"[CanJobEquipItemById] Item {itemId} in database for job '{jobCode}': {canEquip} (Jobs: {string.Join(",", dbItem.Jobs)})");
+                return canEquip;
+            }
+
+            Plugin.Log.Debug($"[CanJobEquipItemById] Item {itemId} not in database or has no job data, checking game data for job '{jobCode}'");
+            
+            // Fallback to game data inspection if not in database
+            var itemSheet = dataManager.GetExcelSheet<Item>();
+            if (itemSheet == null)
+            {
+                Plugin.Log.Debug($"[CanJobEquipItemById] ItemSheet is null for item {itemId}");
+                return true; // Assume valid if we can't check
+            }
+            
+            var itemRow = itemSheet.FirstOrDefault(i => i.RowId == itemId);
+            if (itemRow.RowId == 0)
+            {
+                Plugin.Log.Debug($"[CanJobEquipItemById] Item {itemId} not found in sheet");
+                return true; // Assume valid if item not found
+            }
+            
+            // If item has no ClassJobCategory restrictions, it's for all jobs
+            if (itemRow.ClassJobCategory.RowId == 0)
+            {
+                Plugin.Log.Debug($"[CanJobEquipItemById] Item {itemId} has no ClassJobCategory restrictions");
+                return true;
+            }
+            
+            var classJobCategory = itemRow.ClassJobCategory.Value;
+            var result = CanJobEquipItem(classJobCategory, jobCode);
+            Plugin.Log.Debug($"[CanJobEquipItemById] Item {itemId} for job '{jobCode}': {result}");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error($"[CanJobEquipItemById] Exception for item {itemId}, job '{jobCode}': {ex.Message}\n{ex.StackTrace}");
+            return true; // Assume valid on error
         }
     }
 
@@ -215,32 +325,6 @@ public static class ItemDiscoveryHelper
             return jobs.ToArray();
         }
 
-        // Weapon-specific patterns (for weapons and shields)
-        string lowerName = itemName.ToLower();
-        
-        if (lowerName.Contains("falchion")) { jobs.Add("PLD"); }
-        if (lowerName.Contains("war axe")) { jobs.Add("WAR"); }
-        if (lowerName.Contains("guillotine")) { jobs.Add("DRK"); }
-        if (lowerName.Contains("sawback")) { jobs.Add("GNB"); }
-        if (lowerName.Contains("cane")) { jobs.Add("WHM"); }
-        if (lowerName.Contains("rod")) { jobs.Add("BLM"); }
-        if (lowerName.Contains("index")) { jobs.Add("SMN"); }
-        if (lowerName.Contains("codex")) { jobs.Add("SCH"); }
-        if (lowerName.Contains("knives")) { jobs.Add("NIN"); }
-        if (lowerName.Contains("pistol")) { jobs.Add("MCH"); }
-        if (lowerName.Contains("astrometer")) { jobs.Add("AST"); }
-        if (lowerName.Contains("blade") && !lowerName.Contains("twinfang")) { jobs.Add("SAM"); }
-        if (lowerName.Contains("foil")) { jobs.Add("RDM"); }
-        if (lowerName.Contains("longbow")) { jobs.Add("BRD"); }
-        if (lowerName.Contains("baghnakhs")) { jobs.Add("MNK"); }
-        if (lowerName.Contains("scythe") || lowerName.Contains("war scythe")) { jobs.Add("RPR"); }
-        if (lowerName.Contains("quoits")) { jobs.Add("DNC"); }
-        if (lowerName.Contains("syrinxi")) { jobs.Add("SGE"); }
-        if (lowerName.Contains("twinfang")) { jobs.Add("VPR"); }
-        if (lowerName.Contains("brush")) { jobs.Add("PCT"); }
-        if (lowerName.Contains("kite shield")) { jobs.Add("PLD"); }
-        if (lowerName.Contains("sainti")) { jobs.Add("MNK"); }
-
         return jobs.Count > 0 ? jobs.ToArray() : Array.Empty<string>();
     }
 
@@ -254,6 +338,75 @@ public static class ItemDiscoveryHelper
         {
             var jobsStr = string.Join(", ", item.Jobs);
             Plugin.Log.Information($"  {item.Id}: {item.Name} ({item.Category}) - Jobs: [{jobsStr}]");
+        }
+    }
+
+    /// <summary>
+    /// Convert a model/set ID to an actual item ID by searching the item database.
+    /// This is used when reading equipment from DrawData, which stores model IDs instead of item IDs.
+    /// </summary>
+    public static uint? GetItemIdFromModelId(IDataManager dataManager, uint modelId, GearSlot slot)
+    {
+        try
+        {
+            var itemSheet = dataManager.GetExcelSheet<Item>();
+            if (itemSheet == null)
+                return null;
+
+            // In FFXIV, the CharacterArmor.Id from DrawData is the ITEM ID itself, not a model ID
+            // We should check if this ID directly exists in the item sheet
+            try
+            {
+                var directItem = itemSheet.GetRow(modelId);
+                if (directItem.RowId > 0)
+                {
+                    Plugin.Log.Debug($"[GetItemIdFromModelId] Item {modelId} ({directItem.Name}) found directly in sheet");
+                    return modelId;
+                }
+            }
+            catch
+            {
+                // GetRow may throw if ID doesn't exist
+            }
+
+            // If not found directly, try searching by model fields
+            // Equipment can be matched by multiple model-related fields
+            foreach (var item in itemSheet)
+            {
+                if (item.RowId == 0 || item.RowId > 50000) // Skip very high ID items that might be special
+                    continue;
+
+                try
+                {
+                    // Check ModelMain
+                    if ((uint)item.ModelMain == modelId)
+                    {
+                        Plugin.Log.Debug($"[GetItemIdFromModelId] Found item {item.RowId} ({item.Name}) via ModelMain");
+                        return item.RowId;
+                    }
+
+                    // Some items might have the model in other fields
+                    // Check if the item's model matches via other properties
+                    if (item.ModelSub > 0 && (uint)item.ModelSub == modelId)
+                    {
+                        Plugin.Log.Debug($"[GetItemIdFromModelId] Found item {item.RowId} ({item.Name}) via ModelSub");
+                        return item.RowId;
+                    }
+                }
+                catch
+                {
+                    // Skip items where model access fails
+                    continue;
+                }
+            }
+
+            Plugin.Log.Debug($"[GetItemIdFromModelId] No item found with model ID {modelId}");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error($"[GetItemIdFromModelId] Error converting model ID {modelId}: {ex.Message}");
+            return null;
         }
     }
 }

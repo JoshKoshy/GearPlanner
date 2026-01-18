@@ -103,12 +103,46 @@ public static class EquipmentReader
     /// <summary>
     /// Sync the player's current equipped gear to a team member.
     /// This updates the "Current" gear fields with what they're actually wearing.
+    /// Only syncs gear if the team member's job matches the player's current job.
     /// </summary>
     public static void SyncPlayerEquipmentToMember(RaidMember member, IGameInventory gameInventory)
     {
         try
         {
+            // Get the player's current job
+#pragma warning disable CS0618
+            var playerCharacter = Plugin.ClientState.LocalPlayer;
+#pragma warning restore CS0618
+            if (playerCharacter == null)
+            {
+                Plugin.Log.Error("Cannot sync equipment: Player is not logged in");
+                return;
+            }
+
+            // Get the player's current job class ID and convert to job name
+            uint playerJobId = playerCharacter.ClassJob.RowId;
+            var playerJobName = GetJobNameFromClassJobId(playerJobId);
+            
+            if (string.IsNullOrEmpty(playerJobName))
+            {
+                Plugin.Log.Error($"Cannot sync equipment: Unknown player job ID {playerJobId}");
+                return;
+            }
+
+            Plugin.Log.Debug($"Player's current job: {playerJobName}");
+            Plugin.Log.Debug($"Team member's job: {member.Job}");
+
+            // Only allow syncing if the jobs match
+            if (!playerJobName.Equals(member.Job, System.StringComparison.OrdinalIgnoreCase))
+            {
+                Plugin.Log.Warning($"Cannot sync equipment for {member.Name}: Player is {playerJobName} but team member is {member.Job}. Jobs must match to sync gear.");
+                return;
+            }
+
             var equippedItems = GetPlayerEquipment(gameInventory);
+            
+            // Get the member's job code for validation
+            var jobCode = FFXIVJobs.GetJobAbbreviation(member.Job);
             
             // Collect rings separately for smart matching
             var ringsToSync = new Dictionary<GearSlot, uint>();
@@ -126,15 +160,22 @@ public static class EquipmentReader
                     continue;
                 }
 
+                // Validate that the team member's job can equip this item
+                if (!ItemDiscoveryHelper.CanJobEquipItemById(itemId, jobCode, Plugin.DataManager))
+                {
+                    Plugin.Log.Debug($"Skipped syncing item {itemId} for {member.Name}: {member.Job} ({jobCode}) cannot equip this gear");
+                    continue;
+                }
+
                 if (!member.Gear.ContainsKey(slotKey))
                 {
                     member.Gear[slotKey] = new GearPiece(slot);
                 }
 
                 var gearPiece = member.Gear[slotKey];
+                
                 gearPiece.CurrentItemId = itemId;
                 gearPiece.Source = DetermineItemSource(itemId);
-
                 Plugin.Log.Information($"Synced {slot}: Item {itemId}, Source {gearPiece.Source}");
             }
 
@@ -149,6 +190,136 @@ public static class EquipmentReader
         catch (Exception ex)
         {
             Plugin.Log.Error($"Error syncing equipment to member: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Sync a targeted player's equipped gear to a team member.
+    /// Reads from the Examine window (AgentInspect) which contains the examined character's equipment.
+    /// Only syncs gear if the examined player's job matches the team member's job.
+    /// </summary>
+    public static void SyncTargetEquipmentToMember(RaidMember member, IGameInventory gameInventory)
+    {
+        try
+        {
+            // Get the local player
+#pragma warning disable CS0618
+            var localPlayer = Plugin.ClientState.LocalPlayer;
+#pragma warning restore CS0618
+            if (localPlayer == null)
+            {
+                Plugin.Log.Warning("Cannot sync equipment: Not logged in.");
+                return;
+            }
+
+            // Get the Examine window data to determine the examined character's job
+            unsafe
+            {
+                var agentInspect = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentInspect.Instance();
+                if (agentInspect == null || agentInspect->CurrentEntityId == 0)
+                {
+                    Plugin.Log.Warning("Cannot sync equipment: No character is currently being examined. Please use the Examine window first.");
+                    return;
+                }
+
+                uint currentEntityId = agentInspect->CurrentEntityId;
+                Plugin.Log.Information($"[DIAGNOSTIC] Examined character EntityId from AgentInspect: {currentEntityId} (0x{currentEntityId:X})");
+
+                // Try to find the examined character in the ObjectTable
+                var examinedCharacter = Plugin.ObjectTable.FirstOrDefault(obj => obj.EntityId == currentEntityId);
+                
+                if (examinedCharacter != null && examinedCharacter is Dalamud.Game.ClientState.Objects.Types.ICharacter exChar)
+                {
+                    Plugin.Log.Information($"[DIAGNOSTIC] Found potential match: {exChar.Name} (EntityId: {examinedCharacter.EntityId} / 0x{examinedCharacter.EntityId:X})");
+                }
+
+                int tableCount = Plugin.ObjectTable.Count();
+                Plugin.Log.Information($"[DIAGNOSTIC] ObjectTable contents ({tableCount} total):");
+                int charCount = 0;
+                foreach (var obj in Plugin.ObjectTable)
+                {
+                    if (obj is Dalamud.Game.ClientState.Objects.Types.ICharacter character)
+                    {
+                        string charName = character.Name.TextValue ?? character.Name.ToString();
+                        Plugin.Log.Information($"  [{charCount}] {charName} - EntityId: {obj.EntityId} (0x{obj.EntityId:X})");
+                        charCount++;
+                    }
+                }
+
+                if (examinedCharacter == null)
+                {
+                    Plugin.Log.Warning("Cannot sync equipment: Could not find the examined character in the object table. Check logs above for available EntityIds.");
+                    return;
+                }
+
+                var examinedPlayer = examinedCharacter as Dalamud.Game.ClientState.Objects.Types.ICharacter;
+                if (examinedPlayer == null)
+                {
+                    Plugin.Log.Warning("Cannot sync equipment: Examined target is not a valid character.");
+                    return;
+                }
+
+                var examinedPlayerName = examinedPlayer.Name.ToString();
+                Plugin.Log.Information($"Syncing from examined player: {examinedPlayerName}");
+
+                // Get the examined player's equipped items from the Examine window
+                // Note: The examine window shows equipment from when the character was examined,
+                // so the current job may differ. Per-item validation will ensure compatibility.
+                Plugin.Log.Debug($"Reading equipment from Examine window for {examinedPlayerName}");
+                var examinedEquippedItems = ExamineWindowReader.GetExaminedPlayerEquipment();
+
+                // Get the member's job code for validation
+                var jobCode = FFXIVJobs.GetJobAbbreviation(member.Job);
+                
+                // Collect rings separately for smart matching
+                var ringsToSync = new Dictionary<GearSlot, uint>();
+
+                foreach (var kvp in examinedEquippedItems)
+                {
+                    var slot = kvp.Key;
+                    var itemId = kvp.Value;
+                    var slotKey = slot.ToString();
+
+                    // Handle rings specially - match them to desired sources
+                    if (slot == GearSlot.Ring1 || slot == GearSlot.Ring2)
+                    {
+                        ringsToSync[slot] = itemId;
+                        continue;
+                    }
+
+                    // Validate that the team member's job can equip this item
+                    bool canEquip = ItemDiscoveryHelper.CanJobEquipItemById(itemId, jobCode, Plugin.DataManager);
+                    
+                    if (!canEquip)
+                    {
+                        Plugin.Log.Warning($"Skipped syncing item {itemId} for {member.Name}: {member.Job} ({jobCode}) cannot equip this gear");
+                        continue;
+                    }
+
+                    if (!member.Gear.ContainsKey(slotKey))
+                    {
+                        member.Gear[slotKey] = new GearPiece(slot);
+                    }
+
+                    var gearPiece = member.Gear[slotKey];
+                    
+                    gearPiece.CurrentItemId = itemId;
+                    gearPiece.Source = DetermineItemSource(itemId);
+                    Plugin.Log.Information($"Synced {slot}: Item {itemId}, Source {gearPiece.Source}");
+                }
+
+                // Now handle rings with smart matching
+                if (ringsToSync.Count > 0)
+                {
+                    SyncRingsToMember(member, ringsToSync);
+                }
+
+                Plugin.Log.Information($"Successfully synced equipment from player {examinedPlayerName} to {member.Name}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error($"Error syncing target equipment to member: {ex.Message}\n{ex.StackTrace}");
         }
     }
 
@@ -170,10 +341,21 @@ public static class EquipmentReader
 
         // Determine sources of the rings we're syncing
         var ringItems = new List<(GearSlot slot, uint itemId, GearSource source)>();
+        var jobCode = FFXIVJobs.GetJobAbbreviation(member.Job);
+        
         foreach (var kvp in ringsToSync)
         {
-            var source = DetermineItemSource(kvp.Value);
-            ringItems.Add((kvp.Key, kvp.Value, source));
+            var itemId = kvp.Value;
+            
+            // Validate that the job can equip this ring
+            if (!ItemDiscoveryHelper.CanJobEquipItemById(itemId, jobCode, Plugin.DataManager))
+            {
+                Plugin.Log.Debug($"Skipped ring sync for {member.Name}: Item {itemId} cannot be equipped by {member.Job} ({jobCode})");
+                continue;
+            }
+            
+            var source = DetermineItemSource(itemId);
+            ringItems.Add((kvp.Key, itemId, source));
         }
 
         // Match rings to slots based on desired source
@@ -228,5 +410,59 @@ public static class EquipmentReader
             member.Gear[ring2Key].Source = ring2Item.source;
             Plugin.Log.Information($"Synced Ring2: Item {ring2Item.itemId}, Source {ring2Item.source}");
         }
+    }
+
+    /// <summary>
+    /// Convert a ClassJob ID from the game to the corresponding FFXIV job name.
+    /// </summary>
+    private static string? GetJobNameFromClassJobId(uint classJobId)
+    {
+        // Map of ClassJob IDs to job names (used in modern FFXIV)
+        return classJobId switch
+        {
+            1 => "Gladiator",   // GLA - becomes Paladin
+            2 => "Pugilist",    // PGL - becomes Monk
+            3 => "Marauder",    // MRD - becomes Warrior
+            4 => "Lancer",      // LNC - becomes Dragoon
+            5 => "Archer",      // ARC - becomes Bard
+            6 => "Conjurer",    // CNJ - becomes White Mage
+            7 => "Thaumaturge", // THM - becomes Black Mage
+            8 => "Carpenter",   // CRP - Crafter
+            9 => "Blacksmith",  // BSM - Crafter
+            10 => "Armorer",    // ARM - Crafter
+            11 => "Goldsmith",  // GSM - Crafter
+            12 => "Weaver",     // WVR - Crafter
+            13 => "Leatherworker", // LTW - Crafter
+            14 => "Alchemist",  // ALC - Crafter
+            15 => "Culinarian", // CUL - Crafter
+            16 => "Miner",      // MIN - Gatherer
+            17 => "Botanist",   // BTN - Gatherer
+            18 => "Fisher",     // FSH - Gatherer
+            19 => "Paladin",    // PLD
+            20 => "Monk",       // MNK
+            21 => "Warrior",    // WAR
+            22 => "Dragoon",    // DRG
+            23 => "Bard",       // BRD
+            24 => "White Mage",  // WHM
+            25 => "Black Mage",  // BLM
+            26 => "Arcanist",   // ACN - becomes Summoner/Scholar
+            27 => "Summoner",   // SMN
+            28 => "Scholar",    // SCH
+            29 => "Rogue",      // ROG - becomes Ninja
+            30 => "Ninja",      // NIN
+            31 => "Machinist",  // MCH
+            32 => "Dark Knight", // DRK
+            33 => "Astrologian", // AST
+            34 => "Samurai",    // SAM
+            35 => "Red Mage",   // RDM
+            36 => "Blue Mage",  // BLU
+            37 => "Gunbreaker", // GNB
+            38 => "Dancer",     // DNC
+            39 => "Reaper",     // RPR
+            40 => "Sage",       // SGE
+            41 => "Viper",      // VPR
+            42 => "Pictomancer", // PCT
+            _ => null
+        };
     }
 }

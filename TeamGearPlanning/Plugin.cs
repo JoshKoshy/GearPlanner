@@ -19,6 +19,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IGameInventory GameInventory { get; private set; } = null!;
+    [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
 
     private const string CommandName = "/tgp";
 
@@ -111,6 +112,9 @@ public sealed class Plugin : IDalamudPlugin
                 break;
             case "hide":
                 MainWindow.IsOpen = false;
+                break;
+            case "debug":
+                ExamineWindowReader.DumpExaminationDiagnostics();
                 break;
             default:
                 ToggleMainUi();
