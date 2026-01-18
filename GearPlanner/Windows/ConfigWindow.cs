@@ -41,7 +41,7 @@ public class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
-        ImGui.Text("Team Gear Planning Configuration");
+        ImGui.Text("Gear Planner Configuration");
         ImGui.Separator();
 
         // Team Creation Section

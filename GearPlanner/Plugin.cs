@@ -72,7 +72,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Usage: /tgp [config|show|hide]. Manage raid team gear planning."
+            HelpMessage = "Usage: /gp [config|show|hide]. Manage raid gear planning."
         });
 
         // Tell the UI system that we want our windows to be drawn through the window system
@@ -85,7 +85,7 @@ public sealed class Plugin : IDalamudPlugin
         // Adds another button doing the same but for the main ui of the plugin
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
 
-        Log.Information($"===Team Gear Planning Plugin Loaded===");
+        Log.Information($"===Gear Planner Plugin Loaded===");
     }
 
     public void Dispose()

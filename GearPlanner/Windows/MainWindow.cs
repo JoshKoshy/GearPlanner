@@ -32,7 +32,7 @@ public class MainWindow : Window, IDisposable
     private Dictionary<string, bool> whoNeedsItCheckboxes = new(); // Track checkbox states for Who Needs It tab
 
     public MainWindow(Plugin plugin)
-        : base("Team Gear Planning##MainWindow")
+        : base("Gear Planner##MainWindow")
     {
         SizeConstraints = new WindowSizeConstraints
         {
@@ -48,7 +48,7 @@ public class MainWindow : Window, IDisposable
     public override void Draw()
     {
         // Header
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Team Gear Planning");
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Gear Planner");
         ImGui.SameLine();
         if (ImGui.Button("Settings", new Vector2(80, 0)))
         {

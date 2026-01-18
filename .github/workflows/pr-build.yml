@@ -1,4 +1,4 @@
-name: Team Gear Planning PR Builder
+name: Gear Planner PR Builder
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-2022
 
     env:
-      Solution_Name: TeamGearPlanning
+      Solution_Name: GearPlanner
 
     steps:
     - name: Checkout

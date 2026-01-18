@@ -24,7 +24,7 @@ public class SetupWindow : Window, IDisposable
 
     public override void Draw()
     {
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Welcome to Team Gear Planning!");
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Welcome to Gear Planner!");
         ImGui.Separator();
 
         ImGui.TextWrapped(
