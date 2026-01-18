@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace TeamGearPlanning.Models;
+namespace GearPlanner.Models;
 
 public class BiSLibraryData
 {

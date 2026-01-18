@@ -3,10 +3,10 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
-using TeamGearPlanning.Helpers;
-using TeamGearPlanning.Models;
+using GearPlanner.Helpers;
+using GearPlanner.Models;
 
-namespace TeamGearPlanning.Windows;
+namespace GearPlanner.Windows;
 
 public class ConfigWindow : Window, IDisposable
 {
@@ -16,7 +16,7 @@ public class ConfigWindow : Window, IDisposable
     private int selectedJobIndex = 0;
     private const int MaxTeamSize = 8;
 
-    public ConfigWindow(Plugin plugin) : base("Team Configuration###TeamGearPlanningConfig")
+    public ConfigWindow(Plugin plugin) : base("Team Configuration###GearPlannerConfig")
     {
         Flags = ImGuiWindowFlags.AlwaysAutoResize;
         Size = new Vector2(600, 500);

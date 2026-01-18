@@ -3,14 +3,14 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 
-namespace TeamGearPlanning.Windows;
+namespace GearPlanner.Windows;
 
 public class SetupWindow : Window, IDisposable
 {
     private readonly Plugin plugin;
     private string teamNameInput = "My Raid Team";
 
-    public SetupWindow(Plugin plugin) : base("Team Gear Planning Setup###SetupWindow")
+    public SetupWindow(Plugin plugin) : base("Gear Planner Setup###SetupWindow")
     {
         Flags = ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoCollapse;
         Size = new Vector2(600, 400);

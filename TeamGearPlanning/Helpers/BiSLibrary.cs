@@ -4,7 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Linq;
 
-namespace TeamGearPlanning.Helpers;
+namespace GearPlanner.Helpers;
 
 public class BiSLibrary
 {
@@ -25,7 +25,7 @@ public class BiSLibrary
         try
         {
             var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-            var resourceName = "TeamGearPlanning.Data.BiSData.json";
+            var resourceName = "GearPlanner.Data.BiSData.json";
             
             Plugin.Log.Information($"DEBUG: Attempting to load resource '{resourceName}'");
             

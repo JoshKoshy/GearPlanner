@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using System.Runtime.CompilerServices;
 
-namespace TeamGearPlanning.Helpers
+namespace GearPlanner.Helpers
 {
     /// <summary>
     /// Provides methods to read actual item IDs from the FFXIV Examine window.

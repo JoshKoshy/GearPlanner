@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace TeamGearPlanning.Models;
+namespace GearPlanner.Models;
 
 [System.Serializable]
 public class RaidTeam

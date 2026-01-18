@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Plugin.Services;
-using TeamGearPlanning.Models;
+using GearPlanner.Models;
 
-namespace TeamGearPlanning.Helpers;
+namespace GearPlanner.Helpers;
 
 /// <summary>
 /// Dynamic item database that discovers items from FFXIV game data.

@@ -6,13 +6,13 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
-using TeamGearPlanning.Models;
-
+using GearPlanner.Models;
+using GearPlanner.Helpers;
 using ECommons;
 using ECommons.DalamudServices;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 
-namespace TeamGearPlanning.Windows;
+namespace GearPlanner.Windows;
 
 public class MainWindow : Window, IDisposable
 {

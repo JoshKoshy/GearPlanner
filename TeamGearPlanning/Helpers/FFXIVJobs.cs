@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace TeamGearPlanning.Helpers;
+namespace GearPlanner.Helpers;
 
 public static class FFXIVJobs
 {

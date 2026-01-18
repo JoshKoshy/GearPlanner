@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using TeamGearPlanning.Models;
+using GearPlanner.Models;
 
-namespace TeamGearPlanning.Helpers;
+namespace GearPlanner.Helpers;
 
 /// <summary>
 /// Detects gear source (Savage, Tome Up, etc.) from item IDs using static mappings and game data.

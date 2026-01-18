@@ -4,11 +4,11 @@ using Dalamud.Plugin;
 using System.IO;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using TeamGearPlanning.Windows;
-using TeamGearPlanning.Models;
-using TeamGearPlanning.Helpers;
+using GearPlanner.Windows;
+using GearPlanner.Models;
+using GearPlanner.Helpers;
 
-namespace TeamGearPlanning;
+namespace GearPlanner;
 
 public sealed class Plugin : IDalamudPlugin
 {
@@ -29,7 +29,7 @@ public sealed class Plugin : IDalamudPlugin
     public Configuration Configuration { get; init; }
     public BiSLibrary BiSLibrary { get; init; }
 
-    public readonly WindowSystem WindowSystem = new("TeamGearPlanning");
+    public readonly WindowSystem WindowSystem = new("GearPlanner");
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
     private SetupWindow SetupWindow { get; init; }

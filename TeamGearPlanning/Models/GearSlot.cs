@@ -1,4 +1,4 @@
-namespace TeamGearPlanning.Models;
+namespace GearPlanner.Models;
 
 [System.Serializable]
 public enum GearSlot

@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
-using TeamGearPlanning.Models;
+using GearPlanner.Models;
 
-namespace TeamGearPlanning.Helpers;
+namespace GearPlanner.Helpers;
 
 /// <summary>
 /// Helper class to discover items from FFXIV game data using Dalamud's IDataManager.

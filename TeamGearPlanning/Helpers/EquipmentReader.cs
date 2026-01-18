@@ -4,9 +4,9 @@ using System.Linq;
 using Dalamud.Game.Inventory;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
-using TeamGearPlanning.Models;
+using GearPlanner.Models;
 
-namespace TeamGearPlanning.Helpers;
+namespace GearPlanner.Helpers;
 
 /// <summary>
 /// Helper class to read the player's currently equipped gear from the game.

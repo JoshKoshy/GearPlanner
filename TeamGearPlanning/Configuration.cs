@@ -1,9 +1,9 @@
 ﻿using Dalamud.Configuration;
 using System;
 using System.Collections.Generic;
-using TeamGearPlanning.Models;
+using GearPlanner.Models;
 
-namespace TeamGearPlanning;
+namespace GearPlanner;
 
 [Serializable]
 public class Configuration : IPluginConfiguration
