@@ -26,6 +26,9 @@ public class MainWindow : Window, IDisposable
     private List<Models.GearSheet> individualTabSheets = new(); // Sheets for Individual tab
     private int individualTabSelectedSheetIndex = 0;
     private Dictionary<int, string> individualSheetRenameInput = new(); // Store rename input per sheet
+    private Dictionary<string, int> lootPlannerAssignments = new(); // Track loot assignments by loot name -> member index
+    private List<string> lootPlannerWeeks = new() { "Week 1" }; // List of weeks for loot planning
+    private int lootPlannerSelectedWeekIndex = 0; // Currently selected week
 
     public MainWindow(Plugin plugin)
         : base("Team Gear Planning##MainWindow")
@@ -83,7 +86,7 @@ public class MainWindow : Window, IDisposable
                 break;
 
             case 2: // Loot Planner tab
-                ImGui.Text("Loot Planner tab - Coming soon");
+                DrawLootPlannerTab();
                 break;
 
             case 3: // Who Needs it? tab
@@ -1802,9 +1805,159 @@ public class MainWindow : Window, IDisposable
         ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "White");
         ImGui.TextWrapped("Potential for significant improvement.");
 
+        ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "White");
+        ImGui.TextWrapped("Potential for significant improvement.");
+
         ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Red");
         ImGui.TextWrapped("Upgrade this ASAP");
 
         ImGui.PopStyleColor();
+    }
+
+    private void DrawLootPlannerTab()
+    {
+        if (plugin.Configuration.RaidTeams.Count == 0)
+        {
+            ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.0f, 1.0f), "No raid teams configured.");
+            ImGui.Text("Use /tgp config to create a team or edit the sample team.");
+            return;
+        }
+
+        var selectedTeamIndex = plugin.Configuration.SelectedTeamIndex;
+        if (selectedTeamIndex < 0 || selectedTeamIndex >= plugin.Configuration.RaidTeams.Count)
+        {
+            selectedTeamIndex = 0;
+            plugin.Configuration.SelectedTeamIndex = 0;
+        }
+
+        var team = plugin.Configuration.RaidTeams[selectedTeamIndex];
+
+        ImGui.Spacing();
+
+        // Team selector
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Select Team:");
+        ImGui.SameLine(0, 5);
+
+        var teamNames = plugin.Configuration.RaidTeams.Select(t => t.Name).ToArray();
+        int selectedTeamIndexLocal = selectedTeamIndex;
+        ImGui.SetNextItemWidth(150);
+        if (ImGui.Combo("##LootPlannerTeamSelector", ref selectedTeamIndexLocal, teamNames))
+        {
+            plugin.Configuration.SelectedTeamIndex = selectedTeamIndexLocal;
+            plugin.Configuration.Save();
+            team = plugin.Configuration.RaidTeams[selectedTeamIndexLocal];
+        }
+
+        ImGui.Spacing();
+
+        // Week selector
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Select Week:");
+        ImGui.SameLine(0, 5);
+
+        var weekNames = lootPlannerWeeks.ToArray();
+        ImGui.SetNextItemWidth(150);
+        if (ImGui.Combo("##LootPlannerWeekSelector", ref lootPlannerSelectedWeekIndex, weekNames))
+        {
+            if (lootPlannerSelectedWeekIndex < 0)
+                lootPlannerSelectedWeekIndex = 0;
+        }
+
+        // Add new week button
+        ImGui.SameLine(0, 5);
+        if (ImGui.Button("+", new Vector2(25, 0)))
+        {
+            string newWeekName = $"Week {lootPlannerWeeks.Count + 1}";
+            lootPlannerWeeks.Add(newWeekName);
+            lootPlannerSelectedWeekIndex = lootPlannerWeeks.Count - 1;
+        }
+
+        // Delete week button (greyed out if only one week)
+        ImGui.SameLine(0, 5);
+        if (lootPlannerWeeks.Count <= 1)
+        {
+            ImGui.BeginDisabled();
+        }
+        
+        if (ImGui.Button("Del", new Vector2(30, 0)))
+        {
+            lootPlannerWeeks.RemoveAt(lootPlannerSelectedWeekIndex);
+            if (lootPlannerSelectedWeekIndex >= lootPlannerWeeks.Count)
+                lootPlannerSelectedWeekIndex = lootPlannerWeeks.Count - 1;
+        }
+        
+        if (lootPlannerWeeks.Count <= 1)
+        {
+            ImGui.EndDisabled();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // Define all loot drops by floor
+        var lootByFloor = new Dictionary<int, List<(string Name, int Floor)>>
+        {
+            { 1, new() { ("Earring", 1), ("Necklace", 1), ("Bracelet", 1), ("Ring", 1) } },
+            { 2, new() { ("Head", 2), ("Hands", 2), ("Feet", 2), ("Glaze", 2), ("Token", 2) } },
+            { 3, new() { ("Body", 3), ("Legs", 3), ("Twine", 3), ("Solvent", 3) } },
+            { 4, new() { ("Weapon", 4), ("Coffer", 4), ("Music", 4), ("Mount", 4) } }
+        };
+
+        // Create member name list for dropdowns
+        var memberNames = team.Members.Select((m, idx) => m.Name).Prepend("Unassigned").Append("FFA").ToArray();
+
+        // Get current week name for key
+        string currentWeek = lootPlannerSelectedWeekIndex >= 0 && lootPlannerSelectedWeekIndex < lootPlannerWeeks.Count 
+            ? lootPlannerWeeks[lootPlannerSelectedWeekIndex] 
+            : "Week 1";
+
+        // Start the loot table
+        if (ImGui.BeginTable("LootPlanner", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+        {
+            ImGui.TableSetupColumn("Floor", ImGuiTableColumnFlags.WidthFixed, 60);
+            ImGui.TableSetupColumn("Loot Item", ImGuiTableColumnFlags.WidthFixed, 100);
+            ImGui.TableSetupColumn("Assigned To", ImGuiTableColumnFlags.WidthFixed, 150);
+
+            ImGui.TableHeadersRow();
+
+            // Display each floor's loot
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                var floorLoot = lootByFloor[floor];
+
+                for (int i = 0; i < floorLoot.Count; i++)
+                {
+                    var (lootName, _) = floorLoot[i];
+                    var lootKey = $"{currentWeek}_Floor{floor}_{lootName}";
+
+                    ImGui.TableNextRow();
+
+                    // Floor column (only show for first item of floor)
+                    ImGui.TableSetColumnIndex(0);
+                    if (i == 0)
+                    {
+                        ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.0f, 1.0f), $"Floor {floor}");
+                    }
+
+                    // Loot Item
+                    ImGui.TableSetColumnIndex(1);
+                    ImGui.Text(lootName);
+
+                    // Assigned To (dropdown)
+                    ImGui.TableSetColumnIndex(2);
+                    if (!lootPlannerAssignments.ContainsKey(lootKey))
+                        lootPlannerAssignments[lootKey] = 0; // Default to unassigned
+
+                    int selectedMember = lootPlannerAssignments[lootKey];
+                    ImGui.SetNextItemWidth(-1);
+                    if (ImGui.Combo($"##LootAssign{lootKey}", ref selectedMember, memberNames))
+                    {
+                        lootPlannerAssignments[lootKey] = selectedMember;
+                    }
+                }
+            }
+
+            ImGui.EndTable();
+        }
     }
 }
