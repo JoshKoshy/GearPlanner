@@ -75,9 +75,9 @@ public class SetupWindow : Window, IDisposable
         ImGui.Spacing();
 
         ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Commands:");
-        ImGui.Text("/tgp config - Open team configuration");
-        ImGui.Text("/tgp show - Show main gear tracking window");
-        ImGui.Text("/tgp hide - Hide main gear tracking window");
+        ImGui.Text("/gp config - Open team configuration");
+        ImGui.Text("/gp show - Show main gear tracking window");
+        ImGui.Text("/gp hide - Hide main gear tracking window");
 
         ImGui.Spacing();
         

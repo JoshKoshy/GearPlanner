@@ -55,7 +55,7 @@ public class MainWindow : Window, IDisposable
             plugin.ToggleConfigUi();
         }
         ImGui.SameLine();
-        ImGui.TextDisabled("(Use /tgp config to manage teams and members)");
+        ImGui.TextDisabled("(Use /gp config to manage teams and members)");
 
         ImGui.Separator();
 
@@ -413,7 +413,7 @@ public class MainWindow : Window, IDisposable
         if (plugin.Configuration.RaidTeams.Count == 0)
         {
             ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.0f, 1.0f), "No raid teams configured.");
-            ImGui.Text("Use /tgp config to create a team or edit the sample team.");
+            ImGui.Text("Use /gp config to create a team or edit the sample team.");
             return;
         }
 
@@ -1820,7 +1820,7 @@ public class MainWindow : Window, IDisposable
         if (plugin.Configuration.RaidTeams.Count == 0)
         {
             ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.0f, 1.0f), "No raid teams configured.");
-            ImGui.Text("Use /tgp config to create a team or edit the sample team.");
+            ImGui.Text("Use /gp config to create a team or edit the sample team.");
             return;
         }
 
@@ -1967,7 +1967,7 @@ public class MainWindow : Window, IDisposable
         if (plugin.Configuration.RaidTeams.Count == 0)
         {
             ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.0f, 1.0f), "No raid teams configured.");
-            ImGui.Text("Use /tgp config to create a team or edit the sample team.");
+            ImGui.Text("Use /gp config to create a team or edit the sample team.");
             return;
         }
 
