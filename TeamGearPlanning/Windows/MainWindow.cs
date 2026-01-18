@@ -17,8 +17,8 @@ public class MainWindow : Window, IDisposable
     private readonly string[] jobOptions = Helpers.FFXIVJobs.GetAllJobOptions();
     private Dictionary<int, string> memberXivGearUrlInput = new(); // Store URL input per member
     private Dictionary<int, int> memberBiSSetIndex = new(); // Store selected BiS set index per member
-    private int selectedTab = 1; // 0=Individual, 1=Team, 2=Loot Planner, 3=Who Needs it?
-    private readonly string[] tabNames = { "Individual", "Team", "Loot Planner", "Who Needs it?" };
+    private int selectedTab = 1; // 0=Individual, 1=Team, 2=Loot Planner, 3=Who Needs it?, 4=Legend
+    private readonly string[] tabNames = { "Individual", "Team", "Loot Planner", "Who Needs it?", "Legend" };
     private List<Models.GearSheet> individualTabSheets = new(); // Sheets for Individual tab
     private int individualTabSelectedSheetIndex = 0;
     private Dictionary<int, string> individualSheetRenameInput = new(); // Store rename input per sheet
@@ -85,6 +85,10 @@ public class MainWindow : Window, IDisposable
             case 3: // Who Needs it? tab
                 ImGui.Text("Who Needs it? tab - Coming soon");
                 break;
+
+            case 4: // Legend tab
+                DrawLegendForIndividualTab();
+                break;
         }
     }
 
@@ -115,7 +119,7 @@ public class MainWindow : Window, IDisposable
             defaultMember.InitializeGear();
             InitializeGearDefaults(defaultMember);
             
-            individualTabSheets.Add(new Models.GearSheet("Main", new List<Models.RaidMember> { defaultMember }));
+            individualTabSheets.Add(new Models.GearSheet("Sheet 1", new List<Models.RaidMember> { defaultMember }));
             individualTabSelectedSheetIndex = 0;
             plugin.Configuration.IndividualTabSheets = individualTabSheets;
             plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
@@ -144,17 +148,130 @@ public class MainWindow : Window, IDisposable
             ImGui.SetColumnWidth(0, memberTableWidth);
             ImGui.SetColumnWidth(1, legendMinWidth);
             
+            // Sheet selection and naming - at the top
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Sheet:");
+            ImGui.SameLine(0, 5);
+
+            // Sheet dropdown combo
+            var sheetNames = individualTabSheets.Select(s => s.Name).ToArray();
+            ImGui.SetNextItemWidth(150);
+            if (ImGui.Combo("##SheetSelector", ref individualTabSelectedSheetIndex, sheetNames))
+            {
+                plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
+                plugin.Configuration.Save();
+            }
+
+            // Add new sheet button
+            ImGui.SameLine(0, 5);
+            if (ImGui.Button("+", new Vector2(25, 0)))
+            {
+                var newMember = new Models.RaidMember("Player Name", "Paladin", Models.JobRole.Tank);
+                newMember.InitializeGear();
+                InitializeGearDefaults(newMember);
+                
+                string newSheetName = $"Sheet {individualTabSheets.Count + 1}";
+                individualTabSheets.Add(new Models.GearSheet(newSheetName, new List<Models.RaidMember> { newMember }));
+                individualTabSelectedSheetIndex = individualTabSheets.Count - 1;
+                individualSheetRenameInput[individualTabSelectedSheetIndex] = newSheetName;
+                plugin.Configuration.IndividualTabSheets = individualTabSheets;
+                plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Spacing();
+
+            // Floor Clears section - moved to top
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
+            
+            // Row 1: Floor 1 and Floor 2
+            ImGui.Text("Floor 1:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(80);
+            int floor1Clears = currentSheet.Floor1Clears;
+            if (ImGui.InputInt("##IndividualFloor1Clears", ref floor1Clears, 1, 5))
+            {
+                currentSheet.Floor1Clears = floor1Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.SameLine(200);
+            ImGui.Text("Floor 2:");
+            ImGui.SameLine(280);
+            ImGui.SetNextItemWidth(80);
+            int floor2Clears = currentSheet.Floor2Clears;
+            if (ImGui.InputInt("##IndividualFloor2Clears", ref floor2Clears, 1, 5))
+            {
+                currentSheet.Floor2Clears = floor2Clears;
+                plugin.Configuration.Save();
+            }
+
+            // Row 2: Floor 3 and Floor 4
+            ImGui.Text("Floor 3:");
+            ImGui.SameLine(80);
+            ImGui.SetNextItemWidth(80);
+            int floor3Clears = currentSheet.Floor3Clears;
+            if (ImGui.InputInt("##IndividualFloor3Clears", ref floor3Clears, 1, 5))
+            {
+                currentSheet.Floor3Clears = floor3Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.SameLine(200);
+            ImGui.Text("Floor 4:");
+            ImGui.SameLine(280);
+            ImGui.SetNextItemWidth(80);
+            int floor4Clears = currentSheet.Floor4Clears;
+            if (ImGui.InputInt("##IndividualFloor4Clears", ref floor4Clears, 1, 5))
+            {
+                currentSheet.Floor4Clears = floor4Clears;
+                plugin.Configuration.Save();
+            }
+
+            ImGui.Spacing();
+
+            // Delete sheet button moved below with sheet name field
+            
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            
             // Left - Member section
             float memberSectionWidth = System.Math.Min(memberTableWidth - 10, 350);
             if (ImGui.BeginChild("IndividualMemberSection", new System.Numerics.Vector2(memberSectionWidth, 590), true))
             {
-                // Member name - editable
-                string name = member.Name;
-                ImGui.SetNextItemWidth(-1);
-                if (ImGui.InputText("##IndividualCharName", ref name, 50, ImGuiInputTextFlags.EnterReturnsTrue))
+                // Sheet name - editable with delete button
+                if (!individualSheetRenameInput.ContainsKey(individualTabSelectedSheetIndex))
+                    individualSheetRenameInput[individualTabSelectedSheetIndex] = currentSheet.Name;
+
+                string sheetNameInput = individualSheetRenameInput[individualTabSelectedSheetIndex];
+                ImGui.SetNextItemWidth(-45);
+                if (ImGui.InputText("##IndividualCharName", ref sheetNameInput, 50))
                 {
-                    member.Name = name;
+                    individualSheetRenameInput[individualTabSelectedSheetIndex] = sheetNameInput;
+                    currentSheet.Name = sheetNameInput;
                     plugin.Configuration.Save();
+                }
+
+                // Delete sheet button next to sheet name (greyed out if only one sheet)
+                ImGui.SameLine(0, 5);
+                if (individualTabSheets.Count <= 1)
+                {
+                    ImGui.BeginDisabled();
+                }
+                
+                if (ImGui.Button("Del", new Vector2(-1, 0)))
+                {
+                    individualTabSheets.RemoveAt(individualTabSelectedSheetIndex);
+                    if (individualTabSelectedSheetIndex >= individualTabSheets.Count)
+                        individualTabSelectedSheetIndex = individualTabSheets.Count - 1;
+                    plugin.Configuration.IndividualTabSheets = individualTabSheets;
+                    plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
+                    plugin.Configuration.Save();
+                }
+                
+                if (individualTabSheets.Count <= 1)
+                {
+                    ImGui.EndDisabled();
                 }
                 
                 // Job dropdown
@@ -258,135 +375,6 @@ public class MainWindow : Window, IDisposable
                 ImGui.EndChild();
             }
             
-            ImGui.NextColumn();
-
-            // Right column - Sheet selection, renaming, Floor Clears and Legend
-            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Sheet:");
-            ImGui.SameLine(0, 5);
-
-            // Sheet buttons
-            for (int i = 0; i < individualTabSheets.Count; i++)
-            {
-                if (i > 0) ImGui.SameLine(0, 5);
-                
-                var sheetName = individualTabSheets[i].Name;
-                bool isSelected = individualTabSelectedSheetIndex == i;
-                
-                if (isSelected)
-                    ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.0f, 0.5f, 1.0f, 1.0f));
-                
-                if (ImGui.Button(sheetName, new Vector2(60, 0)))
-                {
-                    individualTabSelectedSheetIndex = i;
-                    plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
-                    plugin.Configuration.Save();
-                }
-                
-                if (isSelected)
-                    ImGui.PopStyleColor();
-            }
-
-            // Add new sheet button
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("+", new Vector2(25, 0)))
-            {
-                var newMember = new Models.RaidMember("Player Name", "Paladin", Models.JobRole.Tank);
-                newMember.InitializeGear();
-                InitializeGearDefaults(newMember);
-                
-                string newSheetName = $"Sheet {individualTabSheets.Count}";
-                individualTabSheets.Add(new Models.GearSheet(newSheetName, new List<Models.RaidMember> { newMember }));
-                individualTabSelectedSheetIndex = individualTabSheets.Count - 1;
-                plugin.Configuration.IndividualTabSheets = individualTabSheets;
-                plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
-                plugin.Configuration.Save();
-            }
-
-            // Remove sheet button (only if more than one sheet)
-            if (individualTabSheets.Count > 1)
-            {
-                ImGui.SameLine(0, 5);
-                if (ImGui.Button("X", new Vector2(25, 0)))
-                {
-                    individualTabSheets.RemoveAt(individualTabSelectedSheetIndex);
-                    if (individualTabSelectedSheetIndex >= individualTabSheets.Count)
-                        individualTabSelectedSheetIndex = individualTabSheets.Count - 1;
-                    plugin.Configuration.IndividualTabSheets = individualTabSheets;
-                    plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
-                    plugin.Configuration.Save();
-                }
-            }
-
-            ImGui.Spacing();
-
-            // Sheet rename input
-            if (!individualSheetRenameInput.ContainsKey(individualTabSelectedSheetIndex))
-                individualSheetRenameInput[individualTabSelectedSheetIndex] = currentSheet.Name;
-
-            string sheetNameInput = individualSheetRenameInput[individualTabSelectedSheetIndex];
-            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Sheet Name:");
-            ImGui.SameLine(90);
-            ImGui.SetNextItemWidth(200);
-            if (ImGui.InputText("##IndividualSheetName", ref sheetNameInput, 50))
-            {
-                individualSheetRenameInput[individualTabSelectedSheetIndex] = sheetNameInput;
-                currentSheet.Name = sheetNameInput;
-                plugin.Configuration.Save();
-            }
-
-            ImGui.Spacing();
-            ImGui.Separator();
-            ImGui.Spacing();
-
-            // Floor Clears and Legend
-            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
-            ImGui.Text("Floor 1:");
-            ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(80);
-            int floor1Clears = currentSheet.Floor1Clears;
-            if (ImGui.InputInt("##IndividualFloor1Clears", ref floor1Clears, 1, 5))
-            {
-                currentSheet.Floor1Clears = floor1Clears;
-                plugin.Configuration.Save();
-            }
-
-            ImGui.Text("Floor 2:");
-            ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(80);
-            int floor2Clears = currentSheet.Floor2Clears;
-            if (ImGui.InputInt("##IndividualFloor2Clears", ref floor2Clears, 1, 5))
-            {
-                currentSheet.Floor2Clears = floor2Clears;
-                plugin.Configuration.Save();
-            }
-
-            ImGui.Text("Floor 3:");
-            ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(80);
-            int floor3Clears = currentSheet.Floor3Clears;
-            if (ImGui.InputInt("##IndividualFloor3Clears", ref floor3Clears, 1, 5))
-            {
-                currentSheet.Floor3Clears = floor3Clears;
-                plugin.Configuration.Save();
-            }
-
-            ImGui.Text("Floor 4:");
-            ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(80);
-            int floor4Clears = currentSheet.Floor4Clears;
-            if (ImGui.InputInt("##IndividualFloor4Clears", ref floor4Clears, 1, 5))
-            {
-                currentSheet.Floor4Clears = floor4Clears;
-                plugin.Configuration.Save();
-            }
-
-            ImGui.Spacing();
-            ImGui.Separator();
-            ImGui.Spacing();
-
-            // Legend section
-            DrawLegendForIndividualTab();
-
             ImGui.Columns(1);
             ImGui.EndChild();
         }
@@ -453,8 +441,8 @@ public class MainWindow : Window, IDisposable
         ImGui.SameLine(0, 5);
         if (ImGui.Button("+", new Vector2(25, 0)))
         {
-            int altNumber = team.Sheets.Count; // Main is 0, Alt 1 is 1, Alt 2 is 2, etc.
-            string newSheetName = altNumber == 0 ? "Main" : $"Alt {altNumber}";
+            int altNumber = team.Sheets.Count; // Sheet 1 is 0, Sheet 2 is 1, etc.
+            string newSheetName = $"Sheet {altNumber + 1}";
             
             // Create new sheet with copy of current members
             var newMembers = new List<Models.RaidMember>();
@@ -549,109 +537,6 @@ public class MainWindow : Window, IDisposable
             ImGui.Spacing();
             ImGui.Separator();
             ImGui.Spacing();
-
-            // Right - Legend in a separate child window
-            if (ImGui.BeginChild("LegendChild", new Vector2(-1, -1), true))
-            {
-                // Set default text color to grey
-                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.7f, 0.7f, 0.7f, 1.0f));
-                
-                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Legend");
-                ImGui.SameLine(200);
-                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Weapon");
-                ImGui.SameLine(260);
-                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "ilvl");
-                ImGui.Separator();
-
-                ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Savage");
-                ImGui.SameLine(200);
-                ImGui.Text("795");
-                ImGui.SameLine(260);
-                ImGui.Text("790");
-                ImGui.TextWrapped("Drops from Savage raid.");
-
-                ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Tome Up");
-                ImGui.SameLine(200);
-                ImGui.Text("");
-                ImGui.SameLine(260);
-                ImGui.Text("");
-                ImGui.TextWrapped("Upgraded capped tome gear.");
-
-                ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Catchup");
-                ImGui.SameLine(200);
-                ImGui.Text("785");
-                ImGui.SameLine(260);
-                ImGui.Text("780");
-                ImGui.TextWrapped("Aug, crafted, drops from mid-tier EX, alliance raid, etc.");
-
-                ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Tome");
-                ImGui.SameLine(200);
-                ImGui.Text("780");
-                ImGui.SameLine(260);
-                ImGui.Text("");
-                ImGui.TextWrapped("Non-upgraded capped tome gear.");
-
-                ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Relic");
-                ImGui.SameLine(200);
-                ImGui.Text("775");
-                ImGui.SameLine(260);
-                ImGui.Text("770");
-                ImGui.TextWrapped("Continuously upgradeable personalized gear.");
-
-                ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Crafted");
-                ImGui.SameLine(200);
-                ImGui.Text("");
-                ImGui.SameLine(260);
-                ImGui.Text("770");
-                ImGui.TextWrapped("High-quality crafted gear.");
-
-                ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Prep");
-                ImGui.SameLine(200);
-                ImGui.Text("775");
-                ImGui.SameLine(260);
-                ImGui.Text("770");
-                ImGui.TextWrapped("Drops from EX, normal raid, etc.");
-
-                ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Trash");
-                ImGui.SameLine(200);
-                ImGui.Text("765");
-                ImGui.SameLine(260);
-                ImGui.Text("760");
-                ImGui.TextWrapped("Uncapped tome gear, dungeon gear, last tier's BiS, etc.");
-
-                ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Wow");
-                ImGui.SameLine(200);
-                ImGui.Text("745");
-                ImGui.SameLine(260);
-                ImGui.Text("740");
-                ImGui.TextWrapped("You aren't seriously considering raiding with this, are you?");
-
-                ImGui.Spacing();
-                ImGui.Separator();
-                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Color Guide");
-                ImGui.Separator();
-
-                ImGui.TextColored(new Vector4(0.8f, 0.0f, 1.0f, 1.0f), "Purple");
-                ImGui.TextWrapped("Already have the desired gear.");
-
-                ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Blue");
-                ImGui.TextWrapped("Already at/near max ilv.");
-
-                ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Green");
-                ImGui.TextWrapped("Intermediate gear.");
-
-                ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Yellow");
-                ImGui.TextWrapped("Needs 1 of the 3 upgrade tokens. (Chest/Pants bold.)");
-
-                ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "White");
-                ImGui.TextWrapped("Potential for significant improvement.");
-
-                ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Red");
-                ImGui.TextWrapped("Upgrade this ASAP");
-
-                ImGui.PopStyleColor();
-                ImGui.EndChild();
-            }
 
             ImGui.Columns(1);
             ImGui.EndChild();
@@ -1679,24 +1564,102 @@ public class MainWindow : Window, IDisposable
 
     private void DrawLegendForIndividualTab()
     {
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Legend:");
-        ImGui.TextColored(new Vector4(0.0f, 0.8f, 0.0f, 1.0f), "BiS");
-        ImGui.TextColored(new Vector4(0.0f, 0.8f, 0.0f, 1.0f), "Drop from Savage raid.");
-        ImGui.TextColored(new Vector4(0.2f, 0.8f, 1.0f, 1.0f), "Tome Up");
-        ImGui.TextColored(new Vector4(0.2f, 0.8f, 1.0f, 1.0f), "Tome upgraded crafted gear.");
-        ImGui.TextColored(new Vector4(0.8f, 0.6f, 0.0f, 1.0f), "Crafted");
-        ImGui.TextColored(new Vector4(0.8f, 0.6f, 0.0f, 1.0f), "Handcrafted gear.");
-        ImGui.TextColored(new Vector4(0.8f, 0.0f, 0.8f, 1.0f), "Tome");
-        ImGui.TextColored(new Vector4(0.8f, 0.0f, 0.8f, 1.0f), "Non-upgraded capped tome gear.");
-        ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.0f, 1.0f), "Prep");
-        ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.0f, 1.0f), "Placeholder for early raids.");
-        ImGui.TextColored(new Vector4(0.5f, 0.5f, 0.5f, 1.0f), "Weapon IM");
-        ImGui.TextColored(new Vector4(0.5f, 0.5f, 0.5f, 1.0f), "Drops from EX normal raid, etc.");
-        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Tome Up");
-        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Tome upgraded higher ilvl gear.");
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Crafted");
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Crafter-crafted current expansion gear.");
-        ImGui.TextColored(new Vector4(0.0f, 0.0f, 1.0f, 1.0f), "You can't realistically considering raiding with");
-        ImGui.TextColored(new Vector4(0.0f, 0.0f, 1.0f, 1.0f), "this gear. [Doesn't apply]");
+        // Set default text color to grey
+        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.7f, 0.7f, 0.7f, 1.0f));
+        
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Legend");
+        ImGui.SameLine(200);
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Weapon");
+        ImGui.SameLine(260);
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "ilvl");
+        ImGui.Separator();
+
+        ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Savage");
+        ImGui.SameLine(200);
+        ImGui.Text("795");
+        ImGui.SameLine(260);
+        ImGui.Text("790");
+        ImGui.TextWrapped("Drops from Savage raid.");
+
+        ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Tome Up");
+        ImGui.SameLine(200);
+        ImGui.Text("");
+        ImGui.SameLine(260);
+        ImGui.Text("");
+        ImGui.TextWrapped("Upgraded capped tome gear.");
+
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Catchup");
+        ImGui.SameLine(200);
+        ImGui.Text("785");
+        ImGui.SameLine(260);
+        ImGui.Text("780");
+        ImGui.TextWrapped("Aug, crafted, drops from mid-tier EX, alliance raid, etc.");
+
+        ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Tome");
+        ImGui.SameLine(200);
+        ImGui.Text("780");
+        ImGui.SameLine(260);
+        ImGui.Text("");
+        ImGui.TextWrapped("Non-upgraded capped tome gear.");
+
+        ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Relic");
+        ImGui.SameLine(200);
+        ImGui.Text("775");
+        ImGui.SameLine(260);
+        ImGui.Text("770");
+        ImGui.TextWrapped("Continuously upgradeable personalized gear.");
+
+        ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Crafted");
+        ImGui.SameLine(200);
+        ImGui.Text("");
+        ImGui.SameLine(260);
+        ImGui.Text("770");
+        ImGui.TextWrapped("High-quality crafted gear.");
+
+        ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "Prep");
+        ImGui.SameLine(200);
+        ImGui.Text("775");
+        ImGui.SameLine(260);
+        ImGui.Text("770");
+        ImGui.TextWrapped("Drops from EX, normal raid, etc.");
+
+        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Trash");
+        ImGui.SameLine(200);
+        ImGui.Text("765");
+        ImGui.SameLine(260);
+        ImGui.Text("760");
+        ImGui.TextWrapped("Uncapped tome gear, dungeon gear, last tier's BiS, etc.");
+
+        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Wow");
+        ImGui.SameLine(200);
+        ImGui.Text("745");
+        ImGui.SameLine(260);
+        ImGui.Text("740");
+        ImGui.TextWrapped("You aren't seriously considering raiding with this, are you?");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Color Guide");
+        ImGui.Separator();
+
+        ImGui.TextColored(new Vector4(0.8f, 0.0f, 1.0f, 1.0f), "Purple");
+        ImGui.TextWrapped("Already have the desired gear.");
+
+        ImGui.TextColored(new Vector4(0.0f, 0.5f, 1.0f, 1.0f), "Blue");
+        ImGui.TextWrapped("Already at/near max ilv.");
+
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Green");
+        ImGui.TextWrapped("Intermediate gear.");
+
+        ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Yellow");
+        ImGui.TextWrapped("Needs 1 of the 3 upgrade tokens. (Chest/Pants bold.)");
+
+        ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "White");
+        ImGui.TextWrapped("Potential for significant improvement.");
+
+        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Red");
+        ImGui.TextWrapped("Upgrade this ASAP");
+
+        ImGui.PopStyleColor();
     }
 }

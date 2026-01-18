@@ -101,6 +101,53 @@ public static class EquipmentReader
     }
 
     /// <summary>
+    /// Check if the job string is a role (Tank, Healer, Melee, Ranged, Caster).
+    /// If it is, return the list of job codes that can fill that role.
+    /// If it's not a role, return null.
+    /// </summary>
+    private static List<string>? GetJobsForRole(string jobOrRole)
+    {
+        return jobOrRole switch
+        {
+            "Tank" => new List<string> { "WAR", "DRK", "GNB", "PLD", "GLD", "MRD" },
+            "Healer" => new List<string> { "WHM", "SGE", "SCH", "AST", "CNJ" },
+            "Melee" => new List<string> { "MNK", "DRG", "NIN", "SAM", "RPR", "VPR", "PGL", "LNC" },
+            "Ranged" => new List<string> { "BRD", "MCH", "DNC", "ARC" },
+            "Caster" => new List<string> { "BLM", "SMN", "RDM", "PCT", "THM", "ACN" },
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Check if a job code can equip an item, considering role-based validation.
+    /// If the member's job is a role (Tank, Healer, etc.), check against all jobs in that role.
+    /// Otherwise, check against the specific job.
+    /// </summary>
+    private static bool CanMemberEquipItem(uint itemId, string jobOrRole)
+    {
+        var rolesJobs = GetJobsForRole(jobOrRole);
+        
+        if (rolesJobs != null)
+        {
+            // It's a role, check if any job in that role can equip it
+            foreach (var jobCode in rolesJobs)
+            {
+                if (ItemDiscoveryHelper.CanJobEquipItemById(itemId, jobCode, Plugin.DataManager))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        else
+        {
+            // It's a specific job
+            var jobCode = FFXIVJobs.GetJobAbbreviation(jobOrRole);
+            return ItemDiscoveryHelper.CanJobEquipItemById(itemId, jobCode, Plugin.DataManager);
+        }
+    }
+
+    /// <summary>
     /// Sync the player's current equipped gear to a team member.
     /// This updates the "Current" gear fields with what they're actually wearing.
     /// Only syncs gear if the team member's job matches the player's current job.
@@ -132,17 +179,7 @@ public static class EquipmentReader
             Plugin.Log.Debug($"Player's current job: {playerJobName}");
             Plugin.Log.Debug($"Team member's job: {member.Job}");
 
-            // Only allow syncing if the jobs match
-            if (!playerJobName.Equals(member.Job, System.StringComparison.OrdinalIgnoreCase))
-            {
-                Plugin.Log.Warning($"Cannot sync equipment for {member.Name}: Player is {playerJobName} but team member is {member.Job}. Jobs must match to sync gear.");
-                return;
-            }
-
             var equippedItems = GetPlayerEquipment(gameInventory);
-            
-            // Get the member's job code for validation
-            var jobCode = FFXIVJobs.GetJobAbbreviation(member.Job);
             
             // Collect rings separately for smart matching
             var ringsToSync = new Dictionary<GearSlot, uint>();
@@ -161,9 +198,9 @@ public static class EquipmentReader
                 }
 
                 // Validate that the team member's job can equip this item
-                if (!ItemDiscoveryHelper.CanJobEquipItemById(itemId, jobCode, Plugin.DataManager))
+                if (!CanMemberEquipItem(itemId, member.Job))
                 {
-                    Plugin.Log.Debug($"Skipped syncing item {itemId} for {member.Name}: {member.Job} ({jobCode}) cannot equip this gear");
+                    Plugin.Log.Debug($"Skipped syncing item {itemId} for {member.Name}: {member.Job} cannot equip this gear");
                     continue;
                 }
 
@@ -267,9 +304,6 @@ public static class EquipmentReader
                 // so the current job may differ. Per-item validation will ensure compatibility.
                 Plugin.Log.Debug($"Reading equipment from Examine window for {examinedPlayerName}");
                 var examinedEquippedItems = ExamineWindowReader.GetExaminedPlayerEquipment();
-
-                // Get the member's job code for validation
-                var jobCode = FFXIVJobs.GetJobAbbreviation(member.Job);
                 
                 // Collect rings separately for smart matching
                 var ringsToSync = new Dictionary<GearSlot, uint>();
@@ -287,12 +321,12 @@ public static class EquipmentReader
                         continue;
                     }
 
-                    // Validate that the team member's job can equip this item
-                    bool canEquip = ItemDiscoveryHelper.CanJobEquipItemById(itemId, jobCode, Plugin.DataManager);
+                    // Validate that the team member's job can equip this item (with role-based validation)
+                    bool canEquip = CanMemberEquipItem(itemId, member.Job);
                     
                     if (!canEquip)
                     {
-                        Plugin.Log.Warning($"Skipped syncing item {itemId} for {member.Name}: {member.Job} ({jobCode}) cannot equip this gear");
+                        Plugin.Log.Warning($"Skipped syncing item {itemId} for {member.Name}: {member.Job} cannot equip this gear");
                         continue;
                     }
 
@@ -341,16 +375,15 @@ public static class EquipmentReader
 
         // Determine sources of the rings we're syncing
         var ringItems = new List<(GearSlot slot, uint itemId, GearSource source)>();
-        var jobCode = FFXIVJobs.GetJobAbbreviation(member.Job);
         
         foreach (var kvp in ringsToSync)
         {
             var itemId = kvp.Value;
             
-            // Validate that the job can equip this ring
-            if (!ItemDiscoveryHelper.CanJobEquipItemById(itemId, jobCode, Plugin.DataManager))
+            // Validate that the member's job (or role) can equip this ring
+            if (!CanMemberEquipItem(itemId, member.Job))
             {
-                Plugin.Log.Debug($"Skipped ring sync for {member.Name}: Item {itemId} cannot be equipped by {member.Job} ({jobCode})");
+                Plugin.Log.Debug($"Skipped ring sync for {member.Name}: Item {itemId} cannot be equipped by {member.Job}");
                 continue;
             }
             
