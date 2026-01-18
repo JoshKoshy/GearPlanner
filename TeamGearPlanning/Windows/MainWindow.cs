@@ -8,6 +8,10 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using TeamGearPlanning.Models;
 
+using ECommons;
+using ECommons.DalamudServices;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+
 namespace TeamGearPlanning.Windows;
 
 public class MainWindow : Window, IDisposable
@@ -259,7 +263,7 @@ public class MainWindow : Window, IDisposable
                     ImGui.BeginDisabled();
                 }
                 
-                if (ImGui.Button("Del", new Vector2(-1, 0)))
+                if (ImGui.Button("Del", new Vector2(30, 0)))
                 {
                     individualTabSheets.RemoveAt(individualTabSelectedSheetIndex);
                     if (individualTabSelectedSheetIndex >= individualTabSheets.Count)
@@ -307,8 +311,28 @@ public class MainWindow : Window, IDisposable
                 ImGui.SameLine();
                 if (ImGui.Button("Sync Target", new Vector2(-1, 0)))
                 {
-                    Helpers.EquipmentReader.SyncTargetEquipmentToMember(member, Plugin.GameInventory);
-                    plugin.Configuration.Save();
+                    // Execute examine first
+                    unsafe
+                    {
+                        var target = Plugin.TargetManager.Target;
+                        if (target != null)
+                        {
+                            Plugin.Framework.RunOnTick(() =>
+                            {
+                                AgentInspect.Instance()->ExamineCharacter(target.EntityId);
+                                // Wait 2 seconds for examine window to update, then sync
+                                Plugin.Framework.RunOnTick(() =>
+                                {
+                                    Helpers.EquipmentReader.SyncTargetEquipmentToMember(member, Plugin.GameInventory);
+                                    plugin.Configuration.Save();
+                                }, TimeSpan.FromMilliseconds(1));
+                            });
+                        }
+                        else
+                        {
+                            Plugin.ChatGui.Print("No target selected.");
+                        }
+                    }
                 }
 
                 // Import dialog for xivgear.app
@@ -402,8 +426,79 @@ public class MainWindow : Window, IDisposable
         ImGui.Separator();
         ImGui.Spacing();
 
+        // Team selector dropdown
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Select Team:");
+        ImGui.SameLine(0, 5);
+
+        var teamNames = plugin.Configuration.RaidTeams.Select(t => t.Name).ToArray();
+        int selectedTeamIndexLocal = selectedTeamIndex;
+        ImGui.SetNextItemWidth(150);
+        if (ImGui.Combo("##TeamSelector", ref selectedTeamIndexLocal, teamNames))
+        {
+            plugin.Configuration.SelectedTeamIndex = selectedTeamIndexLocal;
+            plugin.Configuration.Save();
+        }
+
+        // Add new team button
+        ImGui.SameLine(0, 5);
+        if (ImGui.Button("+", new Vector2(25, 0)))
+        {
+            int teamNumber = plugin.Configuration.RaidTeams.Count;
+            string newTeamName = $"Team {teamNumber + 1}";
+            
+            // Create new team with default members from first team if available
+            var newTeam = new Models.RaidTeam(newTeamName);
+            if (plugin.Configuration.RaidTeams.Count > 0)
+            {
+                var firstTeam = plugin.Configuration.RaidTeams[0];
+                newTeam.Members = new List<Models.RaidMember>();
+                foreach (var member in firstTeam.Members)
+                {
+                    var newMember = new Models.RaidMember(member.Name, member.Job, member.Role);
+                    newMember.InitializeGear();
+                    InitializeGearDefaults(newMember);
+                    newTeam.Members.Add(newMember);
+                }
+            }
+            
+            plugin.Configuration.RaidTeams.Add(newTeam);
+            plugin.Configuration.SelectedTeamIndex = plugin.Configuration.RaidTeams.Count - 1;
+            plugin.Configuration.Save();
+        }
+
+        // Delete team button
+        ImGui.SameLine(0, 5);
+        bool isDefaultTeam = plugin.Configuration.RaidTeams.Count > 0 && 
+                            plugin.Configuration.RaidTeams[selectedTeamIndex].Name == "Sample Raid Team";
+        if (plugin.Configuration.RaidTeams.Count <= 1 || isDefaultTeam)
+        {
+            ImGui.BeginDisabled();
+        }
+        
+        if (ImGui.Button("Del", new Vector2(30, 0)))
+        {
+            plugin.Configuration.RaidTeams.RemoveAt(selectedTeamIndex);
+            if (plugin.Configuration.SelectedTeamIndex >= plugin.Configuration.RaidTeams.Count)
+                plugin.Configuration.SelectedTeamIndex = plugin.Configuration.RaidTeams.Count - 1;
+            plugin.Configuration.Save();
+        }
+        
+        if (plugin.Configuration.RaidTeams.Count <= 1 || isDefaultTeam)
+        {
+            ImGui.EndDisabled();
+        }
+
+        ImGui.Spacing();
+
+        // Reload team reference after potential changes
+        selectedTeamIndex = plugin.Configuration.SelectedTeamIndex;
+        if (selectedTeamIndex < 0 || selectedTeamIndex >= plugin.Configuration.RaidTeams.Count)
+            return;
+        
+        team = plugin.Configuration.RaidTeams[selectedTeamIndex];
+
         // Team name
-        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Team:");
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Team Name:");
         ImGui.SameLine(0, 5);
         string teamName = team.Name;
         ImGui.SetNextItemWidth(200);
@@ -413,132 +508,110 @@ public class MainWindow : Window, IDisposable
             plugin.Configuration.Save();
         }
 
-        // Sheet selection buttons
-        ImGui.SameLine(320, 10);
+        ImGui.Spacing();
 
-        // Sheet buttons
-        for (int i = 0; i < team.Sheets.Count; i++)
+        // Sheet selection dropdown - always get fresh team reference and rebuild sheet list
+        var currentTeam = plugin.Configuration.RaidTeams[selectedTeamIndex];
+        var sheetNames = currentTeam.Sheets.Select(s => s.Name).ToArray();
+        int selectedSheetIndex = currentTeam.SelectedSheetIndex;
+        
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Sheet:");
+        ImGui.SameLine(0, 5);
+        ImGui.SetNextItemWidth(150);
+        if (ImGui.Combo("##TeamSheetSelector", ref selectedSheetIndex, sheetNames))
         {
-            if (i > 0) ImGui.SameLine(0, 5);
-            
-            var sheetName = team.Sheets[i].Name;
-            bool isSelected = team.SelectedSheetIndex == i;
-            
-            if (isSelected)
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.0f, 0.5f, 1.0f, 1.0f));
-            
-            if (ImGui.Button(sheetName, new Vector2(60, 0)))
-            {
-                team.SelectedSheetIndex = i;
-                plugin.Configuration.Save();
-            }
-            
-            if (isSelected)
-                ImGui.PopStyleColor();
+            currentTeam.SelectedSheetIndex = selectedSheetIndex;
+            plugin.Configuration.Save();
         }
 
         // Add new sheet button
         ImGui.SameLine(0, 5);
-        if (ImGui.Button("+", new Vector2(25, 0)))
+        if (ImGui.Button("+##AddSheet", new Vector2(25, 0)))
         {
-            int altNumber = team.Sheets.Count; // Sheet 1 is 0, Sheet 2 is 1, etc.
-            string newSheetName = $"Sheet {altNumber + 1}";
-            
-            // Create new sheet with copy of current members
-            var newMembers = new List<Models.RaidMember>();
-            foreach (var member in team.Members)
+            try
             {
-                var newMember = new Models.RaidMember(member.Name, member.Job, member.Role);
-                newMember.InitializeGear();
-                InitializeGearDefaults(newMember);
-                newMembers.Add(newMember);
+                Plugin.Log.Info("Add sheet button clicked");
+                
+                // Count existing "Alt Job" sheets to get next number
+                int altJobCount = currentTeam.Sheets.Count(s => s.Name.StartsWith("Alt Job"));
+                string newSheetName = $"Alt Job {altJobCount + 1}";
+                Plugin.Log.Info($"Creating new sheet: {newSheetName}, current sheet count: {currentTeam.Sheets.Count}");
+                
+                // Create new sheet with copy of current sheet's members
+                int currentSheetIdx = currentTeam.SelectedSheetIndex;
+                Plugin.Log.Info($"Current sheet index: {currentSheetIdx}, sheets count: {currentTeam.Sheets.Count}");
+                
+                if (currentSheetIdx < 0 || currentSheetIdx >= currentTeam.Sheets.Count)
+                {
+                    Plugin.Log.Error($"Invalid sheet index: {currentSheetIdx}");
+                    return;
+                }
+                
+                var currentSheet = currentTeam.Sheets[currentSheetIdx];
+                Plugin.Log.Info($"Current sheet name: {currentSheet.Name}, members: {currentSheet.Members.Count}");
+                
+                var newMembers = new List<Models.RaidMember>();
+                foreach (var member in currentSheet.Members)
+                {
+                    var newMember = new Models.RaidMember(member.Name, member.Job, member.Role);
+                    newMember.InitializeGear();
+                    InitializeGearDefaults(newMember);
+                    newMembers.Add(newMember);
+                }
+                
+                Plugin.Log.Info($"Created {newMembers.Count} new members");
+                
+                currentTeam.Sheets.Add(new Models.GearSheet(newSheetName, newMembers));
+                currentTeam.SelectedSheetIndex = currentTeam.Sheets.Count - 1;
+                plugin.Configuration.Save();
+                
+                Plugin.Log.Info($"Sheet added successfully. Total sheets now: {currentTeam.Sheets.Count}");
             }
-            
-            team.Sheets.Add(new Models.GearSheet(newSheetName, newMembers));
-            team.SelectedSheetIndex = team.Sheets.Count - 1;
-            plugin.Configuration.Save();
+            catch (Exception ex)
+            {
+                Plugin.Log.Error($"Error adding sheet: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
-        // Remove sheet button (only if more than one sheet)
-        if (team.Sheets.Count > 1)
+        // Delete sheet button (greyed out if main sheet or only one sheet)
+        ImGui.SameLine(0, 5);
+        bool isMainSheet = currentTeam.Sheets.Count > 0 && currentTeam.Sheets[currentTeam.SelectedSheetIndex].Name == "Main";
+        if (currentTeam.Sheets.Count <= 1 || isMainSheet)
         {
-            ImGui.SameLine(0, 5);
-            if (ImGui.Button("X", new Vector2(25, 0)))
-            {
-                team.Sheets.RemoveAt(team.SelectedSheetIndex);
-                if (team.SelectedSheetIndex >= team.Sheets.Count)
-                    team.SelectedSheetIndex = team.Sheets.Count - 1;
-                plugin.Configuration.Save();
-            }
+            ImGui.BeginDisabled();
+        }
+        
+        if (ImGui.Button("Del", new Vector2(30, 0)))
+        {
+            currentTeam.Sheets.RemoveAt(currentTeam.SelectedSheetIndex);
+            if (currentTeam.SelectedSheetIndex >= currentTeam.Sheets.Count)
+                currentTeam.SelectedSheetIndex = currentTeam.Sheets.Count - 1;
+            plugin.Configuration.Save();
+        }
+        
+        if (currentTeam.Sheets.Count <= 1 || isMainSheet)
+        {
+            ImGui.EndDisabled();
         }
 
         ImGui.Spacing();
+
         ImGui.Separator();
         ImGui.Spacing();
 
-        // Member tables and legend in a child window
+        // Update team reference for use in member rendering
+        team = currentTeam;
         var availableWidth = ImGui.GetContentRegionAvail().X;
-        float legendMinWidth = 330f;
-        float memberTableWidth = availableWidth - legendMinWidth;
         
-        if (ImGui.BeginChild("MembersAndLegend", new Vector2(availableWidth, -1), false))
+        if (ImGui.BeginChild("MembersSection", new Vector2(availableWidth, -1), true, ImGuiWindowFlags.HorizontalScrollbar))
         {
-            ImGui.Columns(2, "RightSection", false);
-            ImGui.SetColumnWidth(0, memberTableWidth);
-            ImGui.SetColumnWidth(1, legendMinWidth);
-            
             // Left - Member tables
             DrawMemberSection(team.Members, team);
-
-            ImGui.NextColumn();
-
-            // Floor clears section - above legend
-            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
-            ImGui.Text("Floor 1:");
-            ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(80);
-            int floor1Clears = team.Floor1Clears;
-            if (ImGui.InputInt("##Floor1Clears", ref floor1Clears, 1, 5))
-            {
-                team.Floor1Clears = floor1Clears;
-                plugin.Configuration.Save();
-            }
-
-            ImGui.Text("Floor 2:");
-            ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(80);
-            int floor2Clears = team.Floor2Clears;
-            if (ImGui.InputInt("##Floor2Clears", ref floor2Clears, 1, 5))
-            {
-                team.Floor2Clears = floor2Clears;
-                plugin.Configuration.Save();
-            }
-
-            ImGui.Text("Floor 3:");
-            ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(80);
-            int floor3Clears = team.Floor3Clears;
-            if (ImGui.InputInt("##Floor3Clears", ref floor3Clears, 1, 5))
-            {
-                team.Floor3Clears = floor3Clears;
-                plugin.Configuration.Save();
-            }
-
-            ImGui.Text("Floor 4:");
-            ImGui.SameLine(80);
-            ImGui.SetNextItemWidth(80);
-            int floor4Clears = team.Floor4Clears;
-            if (ImGui.InputInt("##Floor4Clears", ref floor4Clears, 1, 5))
-            {
-                team.Floor4Clears = floor4Clears;
-                plugin.Configuration.Save();
-            }
 
             ImGui.Spacing();
             ImGui.Separator();
             ImGui.Spacing();
 
-            ImGui.Columns(1);
             ImGui.EndChild();
         }
     }
@@ -552,17 +625,68 @@ public class MainWindow : Window, IDisposable
         {
             var rowMembers = members.Skip(rowIdx * maxPerRow).Take(maxPerRow).ToList();
             
+            // For first row with 4 members, add an extra column for floor clears
+            int columnCount = rowMembers.Count;
+            bool showFloorClears = (rowIdx == 0 && rowMembers.Count == maxPerRow);
+            if (showFloorClears)
+                columnCount++;
+            
             if (ImGui.BeginChild($"Section_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", 
-                new Vector2(rowMembers.Count * 355 + (rowMembers.Count - 1) * 5, 590), false))
+                new Vector2(columnCount * 355 + (columnCount - 1) * 5, 590), false))
             {
                 ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(5, 5));
-                ImGui.Columns(rowMembers.Count, $"SectionColumns_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", false);
+                ImGui.Columns(columnCount, $"SectionColumns_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", false);
                 
                 for (int i = 0; i < rowMembers.Count; i++)
                 {
                     var memberIdx = team.Members.IndexOf(rowMembers[i]);
                     DrawMemberSection(team, memberIdx);
                     ImGui.NextColumn();
+                }
+                
+                // Draw floor clears in the last column of first row
+                if (showFloorClears)
+                {
+                    ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Floor Clears:");
+                    ImGui.Text("Floor 1:");
+                    ImGui.SameLine(80);
+                    ImGui.SetNextItemWidth(80);
+                    int floor1Clears = team.Floor1Clears;
+                    if (ImGui.InputInt("##Floor1Clears", ref floor1Clears, 1, 5))
+                    {
+                        team.Floor1Clears = floor1Clears;
+                        plugin.Configuration.Save();
+                    }
+
+                    ImGui.Text("Floor 2:");
+                    ImGui.SameLine(80);
+                    ImGui.SetNextItemWidth(80);
+                    int floor2Clears = team.Floor2Clears;
+                    if (ImGui.InputInt("##Floor2Clears", ref floor2Clears, 1, 5))
+                    {
+                        team.Floor2Clears = floor2Clears;
+                        plugin.Configuration.Save();
+                    }
+
+                    ImGui.Text("Floor 3:");
+                    ImGui.SameLine(80);
+                    ImGui.SetNextItemWidth(80);
+                    int floor3Clears = team.Floor3Clears;
+                    if (ImGui.InputInt("##Floor3Clears", ref floor3Clears, 1, 5))
+                    {
+                        team.Floor3Clears = floor3Clears;
+                        plugin.Configuration.Save();
+                    }
+
+                    ImGui.Text("Floor 4:");
+                    ImGui.SameLine(80);
+                    ImGui.SetNextItemWidth(80);
+                    int floor4Clears = team.Floor4Clears;
+                    if (ImGui.InputInt("##Floor4Clears", ref floor4Clears, 1, 5))
+                    {
+                        team.Floor4Clears = floor4Clears;
+                        plugin.Configuration.Save();
+                    }
                 }
                 
                 ImGui.Columns(1);
@@ -626,8 +750,29 @@ public class MainWindow : Window, IDisposable
             ImGui.SameLine();
             if (ImGui.Button("Sync Target", new Vector2(-1, 0)))
             {
-                Helpers.EquipmentReader.SyncTargetEquipmentToMember(member, Plugin.GameInventory);
-                plugin.Configuration.Save();
+                // Execute examine first
+                unsafe
+                {
+                    var target = Plugin.TargetManager.Target;
+                    if (target != null)
+                    {
+                        Plugin.Framework.RunOnTick(() =>
+                        {
+                            AgentInspect.Instance()->ExamineCharacter(target.EntityId);
+                            // Wait 2 seconds for examine window to update, then sync
+                            Plugin.Framework.RunOnTick(() =>
+                            {
+                                Helpers.EquipmentReader.SyncTargetEquipmentToMember(member, Plugin.GameInventory);
+                                plugin.Configuration.Save();
+                            }, TimeSpan.FromSeconds(2));
+                        });
+                    }
+                    else
+                    {
+                        Plugin.ChatGui.Print("No target selected.");
+                    }
+                }
+
             }
 
             // Import dialog for xivgear.app

@@ -20,6 +20,9 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IGameInventory GameInventory { get; private set; } = null!;
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
+    [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static ISeStringEvaluator SeStringEvaluator { get; private set; } = null!;
 
     private const string CommandName = "/tgp";
 
@@ -42,6 +45,9 @@ public sealed class Plugin : IDalamudPlugin
         var configPath = PluginInterface.GetPluginConfigDirectory();
         BiSLibrary = new BiSLibrary(configPath);
         BiSLibrary.LoadBiSSets();
+        
+        // Initialize ECommons
+        ECommons.ECommonsMain.Init(PluginInterface, this);
 
         // Create sample team if this is first launch
         bool isFirstLaunch = Configuration.RaidTeams.Count == 0;

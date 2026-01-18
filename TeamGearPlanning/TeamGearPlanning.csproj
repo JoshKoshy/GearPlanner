@@ -10,4 +10,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Data/BiSData.json" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ECommons" Version="*" />
+  </ItemGroup>
 </Project>
