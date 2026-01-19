@@ -2,6 +2,7 @@
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using System.IO;
+using System.Linq;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using GearPlanner.Windows;
@@ -24,7 +25,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static ISeStringEvaluator SeStringEvaluator { get; private set; } = null!;
 
-    private const string CommandName = "/tgp";
+    private const string CommandName = "/gp";
 
     public Configuration Configuration { get; init; }
     public BiSLibrary BiSLibrary { get; init; }
@@ -37,6 +38,12 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        
+        // Clean up any duplicate sheets that may have been created on deserialization
+        foreach (var team in Configuration.RaidTeams)
+        {
+            team.CleanupDuplicateSheets();
+        }
         
         // Initialize ItemDatabase from game data
         ItemDatabase.Initialize(DataManager);
@@ -133,6 +140,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void CreateSampleTeam()
     {
+        // Check if sample team already exists and has sheets - skip if it does
+        var existingSampleTeam = Configuration.RaidTeams.FirstOrDefault(t => t.Name == "Sample Raid Team");
+        if (existingSampleTeam != null && existingSampleTeam.Sheets.Count > 0)
+        {
+            Log.Information("Sample team already exists with sheets, skipping recreation");
+            return;
+        }
+        
         var sampleTeam = new RaidTeam("Sample Raid Team");
         sampleTeam.Description = "Edit this team to get started! Change names, jobs, and track gear progression.";
         

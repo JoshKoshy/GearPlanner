@@ -36,16 +36,59 @@ public class RaidTeam
     public RaidTeam() 
     {
         // Initialize with default Main sheet
-        Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
-        SelectedSheetIndex = 0;
+        if (Sheets.Count == 0)
+        {
+            Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
+            SelectedSheetIndex = 0;
+        }
+        CleanupDuplicateSheets();
     }
     
     public RaidTeam(string name)
     {
         Name = name;
         // Initialize with default Main sheet
-        Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
-        SelectedSheetIndex = 0;
+        if (Sheets.Count == 0)
+        {
+            Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
+            SelectedSheetIndex = 0;
+        }
+        CleanupDuplicateSheets();
+    }
+    
+    /// <summary>
+    /// Removes duplicate sheets with the same name, keeping only the first occurrence.
+    /// This is called after deserialization to clean up any duplicates.
+    /// </summary>
+    public void CleanupDuplicateSheets()
+    {
+        var sheetNames = new HashSet<string>();
+        var sheetsToRemove = new List<GearSheet>();
+        
+        foreach (var sheet in Sheets)
+        {
+            if (sheetNames.Contains(sheet.Name))
+            {
+                // This is a duplicate
+                sheetsToRemove.Add(sheet);
+            }
+            else
+            {
+                sheetNames.Add(sheet.Name);
+            }
+        }
+        
+        // Remove duplicates
+        foreach (var sheet in sheetsToRemove)
+        {
+            Sheets.Remove(sheet);
+        }
+        
+        // Ensure SelectedSheetIndex is valid
+        if (SelectedSheetIndex < 0 || SelectedSheetIndex >= Sheets.Count)
+        {
+            SelectedSheetIndex = Sheets.Count > 0 ? 0 : -1;
+        }
     }
     
     public void AddMember(RaidMember member)
