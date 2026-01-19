@@ -36,7 +36,7 @@ public class MainWindow : Window, IDisposable
     {
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(1000, 600),
+            MinimumSize = new Vector2(1000, 500),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
 
@@ -245,7 +245,7 @@ public class MainWindow : Window, IDisposable
             
             // Left - Member section
             float memberSectionWidth = System.Math.Min(memberTableWidth - 10, 350);
-            if (ImGui.BeginChild("IndividualMemberSection", new System.Numerics.Vector2(memberSectionWidth, 590), true))
+            if (ImGui.BeginChild("IndividualMemberSection", new System.Numerics.Vector2(memberSectionWidth, 530), true))
             {
                 // Sheet name - editable with delete button
                 if (!individualSheetRenameInput.ContainsKey(individualTabSelectedSheetIndex))
@@ -270,6 +270,9 @@ public class MainWindow : Window, IDisposable
                 if (ImGui.Button("Del", new Vector2(30, 0)))
                 {
                     individualTabSheets.RemoveAt(individualTabSelectedSheetIndex);
+                    // Clear the rename input for the deleted sheet
+                    individualSheetRenameInput.Remove(individualTabSelectedSheetIndex);
+                    
                     if (individualTabSelectedSheetIndex >= individualTabSheets.Count)
                         individualTabSelectedSheetIndex = individualTabSheets.Count - 1;
                     plugin.Configuration.IndividualTabSheets = individualTabSheets;
@@ -298,16 +301,16 @@ public class MainWindow : Window, IDisposable
                     plugin.Configuration.Save();
                 }
 
+                ImGui.SameLine();
                 // Import BiS button
-                ImGui.SetNextItemWidth(-1);
-                if (ImGui.Button("Import BiS", new Vector2(-1, 0)))
+                if (ImGui.Button("Import BiS##IndividualBiS", new Vector2(-1, 0)))
                 {
                     ImGui.OpenPopup("XivGearImportPopupIndividual");
                 }
 
                 // Sync buttons
                 ImGui.SetNextItemWidth(-1);
-                if (ImGui.Button("Sync Current", new Vector2((ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2, 0)))
+                if (ImGui.Button("Sync Self", new Vector2((ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2, 0)))
                 {
                     Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
                     plugin.Configuration.Save();
@@ -516,6 +519,14 @@ public class MainWindow : Window, IDisposable
 
         // Sheet selection dropdown - always get fresh team reference and rebuild sheet list
         var currentTeam = plugin.Configuration.RaidTeams[selectedTeamIndex];
+        
+        // Validate selected sheet index
+        if (currentTeam.SelectedSheetIndex < 0 || currentTeam.SelectedSheetIndex >= currentTeam.Sheets.Count)
+        {
+            currentTeam.SelectedSheetIndex = currentTeam.Sheets.Count > 0 ? 0 : -1;
+            plugin.Configuration.Save();
+        }
+        
         var sheetNames = currentTeam.Sheets.Select(s => s.Name).ToArray();
         int selectedSheetIndex = currentTeam.SelectedSheetIndex;
         
@@ -559,7 +570,9 @@ public class MainWindow : Window, IDisposable
                 {
                     var newMember = new Models.RaidMember(member.Name, member.Job, member.Role);
                     newMember.InitializeGear();
-                    InitializeGearDefaults(newMember);
+                    // For alt job sheets, skip initializing MainHand, Ring1, and Ring2
+                    var skipSlots = new HashSet<Models.GearSlot> { Models.GearSlot.MainHand, Models.GearSlot.Ring1, Models.GearSlot.Ring2 };
+                    InitializeGearDefaults(newMember, skipSlots);
                     newMembers.Add(newMember);
                 }
                 
@@ -579,21 +592,44 @@ public class MainWindow : Window, IDisposable
 
         // Delete sheet button (greyed out if main sheet or only one sheet)
         ImGui.SameLine(0, 5);
-        bool isMainSheet = currentTeam.Sheets.Count > 0 && currentTeam.Sheets[currentTeam.SelectedSheetIndex].Name == "Main";
-        if (currentTeam.Sheets.Count <= 1 || isMainSheet)
+        
+        // Check if we can delete (not Main sheet and more than 1 sheet)
+        bool canDeleteSheet = currentTeam.Sheets.Count > 1 && 
+                             currentTeam.SelectedSheetIndex >= 0 && 
+                             currentTeam.SelectedSheetIndex < currentTeam.Sheets.Count &&
+                             currentTeam.Sheets[currentTeam.SelectedSheetIndex].Name != "Main";
+        
+        if (!canDeleteSheet)
         {
             ImGui.BeginDisabled();
         }
         
-        if (ImGui.Button("Del", new Vector2(30, 0)))
+        if (ImGui.Button("Del##DeleteSheet", new Vector2(30, 0)))
         {
-            currentTeam.Sheets.RemoveAt(currentTeam.SelectedSheetIndex);
-            if (currentTeam.SelectedSheetIndex >= currentTeam.Sheets.Count)
-                currentTeam.SelectedSheetIndex = currentTeam.Sheets.Count - 1;
-            plugin.Configuration.Save();
+            Plugin.Log.Info($"Delete button clicked. SelectedSheetIndex: {currentTeam.SelectedSheetIndex}, Sheets count: {currentTeam.Sheets.Count}");
+            
+            if (currentTeam.SelectedSheetIndex >= 0 && currentTeam.SelectedSheetIndex < currentTeam.Sheets.Count)
+            {
+                Plugin.Log.Info($"Deleting sheet at index {currentTeam.SelectedSheetIndex}");
+                currentTeam.Sheets.RemoveAt(currentTeam.SelectedSheetIndex);
+                Plugin.Log.Info($"Sheet deleted. New count: {currentTeam.Sheets.Count}");
+                
+                // Adjust selection if needed
+                if (currentTeam.Sheets.Count == 0)
+                {
+                    currentTeam.SelectedSheetIndex = -1;
+                }
+                else if (currentTeam.SelectedSheetIndex >= currentTeam.Sheets.Count)
+                {
+                    currentTeam.SelectedSheetIndex = currentTeam.Sheets.Count - 1;
+                }
+                
+                Plugin.Log.Info($"New selected index: {currentTeam.SelectedSheetIndex}");
+                plugin.Configuration.Save();
+            }
         }
         
-        if (currentTeam.Sheets.Count <= 1 || isMainSheet)
+        if (!canDeleteSheet)
         {
             ImGui.EndDisabled();
         }
@@ -697,12 +733,6 @@ public class MainWindow : Window, IDisposable
                 ImGui.PopStyleVar();
                 ImGui.EndChild();
             }
-            
-            if (rowIdx < rowCount - 1)
-            {
-                ImGui.Spacing();
-                ImGui.Spacing();
-            }
         }
     }
 
@@ -711,7 +741,7 @@ public class MainWindow : Window, IDisposable
         var member = team.Members[memberIdx];
         
         // Constrain to a max width and height
-        if (ImGui.BeginChild($"MemberSection{memberIdx}", new System.Numerics.Vector2(350, 590), true))
+        if (ImGui.BeginChild($"MemberSection{memberIdx}", new System.Numerics.Vector2(350, 570), true))
         {
             // Member name - editable
             string name = member.Name;
@@ -738,15 +768,15 @@ public class MainWindow : Window, IDisposable
                 plugin.Configuration.Save();
             }
 
+            ImGui.SameLine();
             // Import BiS button
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.Button("Import BiS", new Vector2(-1, 0)))
+            if (ImGui.Button($"Import BiS##Team{memberIdx}", new Vector2(-1, 0)))
             {
                 ImGui.OpenPopup($"XivGearImportPopup{memberIdx}");
             }
 
             // Sync buttons
-            if (ImGui.Button("Sync Current", new Vector2((ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2, 0)))
+            if (ImGui.Button("Sync Self", new Vector2((ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2, 0)))
             {
                 Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
                 plugin.Configuration.Save();
@@ -1685,11 +1715,23 @@ public class MainWindow : Window, IDisposable
 
     private void InitializeGearDefaults(Models.RaidMember member)
     {
+        InitializeGearDefaults(member, skipSlots: null);
+    }
+
+    private void InitializeGearDefaults(Models.RaidMember member, HashSet<Models.GearSlot>? skipSlots)
+    {
         foreach (var gear in member.Gear.Values)
         {
             gear.DesiredStatus = Models.GearStatus.BiS;
             gear.CurrentStatus = Models.GearStatus.LowIlvl;
             gear.Source = Models.GearSource.None;
+            
+            // Skip desired source initialization for specified slots
+            if (skipSlots != null && skipSlots.Contains(gear.Slot))
+            {
+                gear.DesiredSource = Models.GearSource.None;
+                continue;
+            }
             
             // Set specific desired source defaults
             if (gear.Slot == Models.GearSlot.MainHand)
@@ -1806,9 +1848,6 @@ public class MainWindow : Window, IDisposable
         ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "White");
         ImGui.TextWrapped("Potential for significant improvement.");
 
-        ImGui.TextColored(new Vector4(1.0f, 1.0f, 1.0f, 1.0f), "White");
-        ImGui.TextWrapped("Potential for significant improvement.");
-
         ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "Red");
         ImGui.TextWrapped("Upgrade this ASAP");
 
@@ -1834,10 +1873,11 @@ public class MainWindow : Window, IDisposable
         var team = plugin.Configuration.RaidTeams[selectedTeamIndex];
 
         ImGui.Spacing();
+        ImGui.Spacing();
 
         // Team selector
         ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Select Team:");
-        ImGui.SameLine(0, 5);
+        ImGui.SameLine(0, 20);
 
         var teamNames = plugin.Configuration.RaidTeams.Select(t => t.Name).ToArray();
         int selectedTeamIndexLocal = selectedTeamIndex;
@@ -1850,10 +1890,12 @@ public class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
+        ImGui.Spacing();
+        ImGui.Spacing();
 
         // Week selector
         ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Select Week:");
-        ImGui.SameLine(0, 5);
+        ImGui.SameLine(0, 20);
 
         var weekNames = lootPlannerWeeks.ToArray();
         ImGui.SetNextItemWidth(150);
@@ -1912,53 +1954,175 @@ public class MainWindow : Window, IDisposable
             ? lootPlannerWeeks[lootPlannerSelectedWeekIndex] 
             : "Week 1";
 
-        // Start the loot table
-        if (ImGui.BeginTable("LootPlanner", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+        // Loot table with max width/height
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        float maxTableWidth = Math.Min(availableWidth, 350);
+        
+        if (ImGui.BeginChild("LootPlannerTable", new Vector2(maxTableWidth, 635), true))
         {
-            ImGui.TableSetupColumn("Floor", ImGuiTableColumnFlags.WidthFixed, 60);
-            ImGui.TableSetupColumn("Loot Item", ImGuiTableColumnFlags.WidthFixed, 100);
-            ImGui.TableSetupColumn("Assigned To", ImGuiTableColumnFlags.WidthFixed, 150);
-
-            ImGui.TableHeadersRow();
-
-            // Display each floor's loot
-            for (int floor = 1; floor <= 4; floor++)
+            // Start the loot table
+            if (ImGui.BeginTable("LootPlanner", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
             {
-                var floorLoot = lootByFloor[floor];
+                ImGui.TableSetupColumn("Floor", ImGuiTableColumnFlags.WidthFixed, 60);
+                ImGui.TableSetupColumn("Loot Item", ImGuiTableColumnFlags.WidthFixed, 80);
+                ImGui.TableSetupColumn("Assigned To", ImGuiTableColumnFlags.WidthFixed, 150);
 
-                for (int i = 0; i < floorLoot.Count; i++)
+                ImGui.TableHeadersRow();
+
+                // Display each floor's loot
+                for (int floor = 1; floor <= 4; floor++)
                 {
-                    var (lootName, _) = floorLoot[i];
-                    var lootKey = $"{currentWeek}_Floor{floor}_{lootName}";
+                    var floorLoot = lootByFloor[floor];
 
-                    ImGui.TableNextRow();
-
-                    // Floor column (only show for first item of floor)
-                    ImGui.TableSetColumnIndex(0);
-                    if (i == 0)
+                    for (int i = 0; i < floorLoot.Count; i++)
                     {
-                        ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.0f, 1.0f), $"Floor {floor}");
-                    }
+                        var (lootName, _) = floorLoot[i];
+                        var lootKey = $"{currentWeek}_Floor{floor}_{lootName}";
 
-                    // Loot Item
-                    ImGui.TableSetColumnIndex(1);
-                    ImGui.Text(lootName);
+                        ImGui.TableNextRow(ImGuiTableRowFlags.None, 35);
 
-                    // Assigned To (dropdown)
-                    ImGui.TableSetColumnIndex(2);
-                    if (!lootPlannerAssignments.ContainsKey(lootKey))
-                        lootPlannerAssignments[lootKey] = 0; // Default to unassigned
+                        // Floor column (only show for first item of floor)
+                        ImGui.TableSetColumnIndex(0);
+                        if (i == 0)
+                        {
+                            ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.0f, 1.0f), $"Floor {floor}");
+                        }
 
-                    int selectedMember = lootPlannerAssignments[lootKey];
-                    ImGui.SetNextItemWidth(-1);
-                    if (ImGui.Combo($"##LootAssign{lootKey}", ref selectedMember, memberNames))
-                    {
-                        lootPlannerAssignments[lootKey] = selectedMember;
+                        // Loot Item
+                        ImGui.TableSetColumnIndex(1);
+                        ImGui.Text(lootName);
+
+                        // Show hover text with members who need this gear
+                        if (ImGui.IsItemHovered())
+                        {
+                            var membersNeedingGear = new List<(string name, bool isMain)>();
+                            var altMembersNeedingGear = new List<(string name, string sheetName)>();
+
+                            // Map loot names to gear slots
+                            var slotMap = new Dictionary<string, string>
+                            {
+                                { "Earring", "Ears" },
+                                { "Necklace", "Neck" },
+                                { "Bracelet", "Wrists" },
+                                { "Ring", "Ring1" },
+                                { "Head", "Head" },
+                                { "Hands", "Hands" },
+                                { "Feet", "Feet" },
+                                { "Body", "Body" },
+                                { "Legs", "Legs" },
+                                { "Weapon", "MainHand" }
+                            };
+
+                            if (slotMap.TryGetValue(lootName, out var slotName))
+                            {
+                                // For rings, check both Ring1 and Ring2
+                                var slotsToCheck = lootName == "Ring" ? new[] { "Ring1", "Ring2" } : new[] { slotName };
+
+                                // Always check the main sheet (index 0)
+                                var mainSheet = team.Sheets.Count > 0 ? team.Sheets[0] : null;
+                                if (mainSheet != null)
+                                {
+                                    // Check main sheet members
+                                    for (int memberIdx = 0; memberIdx < mainSheet.Members.Count; memberIdx++)
+                                    {
+                                        var member = mainSheet.Members[memberIdx];
+                                        bool needsForMain = false;
+                                    
+                                    // Check all relevant slots
+                                    foreach (var slot in slotsToCheck)
+                                    {
+                                        if (member.Gear.TryGetValue(slot, out var gearPiece))
+                                        {
+                                            if (gearPiece.DesiredSource == Models.GearSource.Savage && gearPiece.Source != Models.GearSource.Savage)
+                                            {
+                                                needsForMain = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (needsForMain)
+                                    {
+                                        membersNeedingGear.Add((member.Name, true));
+                                        continue;
+                                    }
+
+                                    // Check alts if main doesn't need
+                                    for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                                    {
+                                        var sheet = team.Sheets[sheetIdx];
+                                        if (memberIdx < sheet.Members.Count)
+                                        {
+                                            var altMember = sheet.Members[memberIdx];
+                                            bool needsForAlt = false;
+                                            
+                                            // Check all relevant slots for alt
+                                            foreach (var slot in slotsToCheck)
+                                            {
+                                                if (altMember.Gear.TryGetValue(slot, out var altGearPiece))
+                                                {
+                                                    if (altGearPiece.DesiredSource == Models.GearSource.Savage && altGearPiece.Source != Models.GearSource.Savage)
+                                                    {
+                                                        needsForAlt = true;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            
+                                            if (needsForAlt)
+                                            {
+                                                altMembersNeedingGear.Add((member.Name, sheet.Name));
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (membersNeedingGear.Count > 0 || altMembersNeedingGear.Count > 0)
+                                {
+                                    ImGui.BeginTooltip();
+                                    ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Members who need this:");
+                                    
+                                    // Show main sheet needs in red first
+                                    foreach (var (name, _) in membersNeedingGear)
+                                    {
+                                        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), $"  {name}");
+                                    }
+                                    
+                                    // Then show alt needs in pink
+                                    foreach (var (name, sheetName) in altMembersNeedingGear)
+                                    {
+                                        ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"  {name} ({sheetName})");
+                                    }
+                                    
+                                    ImGui.EndTooltip();
+                                }
+                                }
+                            }
+                        }
+
+                        // Assigned To (dropdown)
+                        ImGui.TableSetColumnIndex(2);
+                        if (!lootPlannerAssignments.ContainsKey(lootKey))
+                            lootPlannerAssignments[lootKey] = 0; // Default to unassigned
+
+                        int selectedMember = lootPlannerAssignments[lootKey];
+                        
+                        // Center dropdown vertically
+                        float cursorY = ImGui.GetCursorPosY();
+                        ImGui.SetCursorPosY(cursorY + (35 - ImGui.GetTextLineHeight()) / 2);
+                        
+                        ImGui.SetNextItemWidth(-1);
+                        if (ImGui.Combo($"##LootAssign{lootKey}", ref selectedMember, memberNames))
+                        {
+                            lootPlannerAssignments[lootKey] = selectedMember;
+                        }
                     }
                 }
-            }
 
-            ImGui.EndTable();
+                ImGui.EndTable();
+            }
+            ImGui.EndChild();
         }
     }
 
@@ -2003,6 +2167,12 @@ public class MainWindow : Window, IDisposable
         // Get all gear slots
         var gearSlots = System.Enum.GetNames(typeof(Models.GearSlot));
 
+        // Create a child container with max width
+        float maxTableWidth = 1030;
+        float availableWidth = ImGui.GetContentRegionAvail().X;
+        float childWidth = Math.Min(availableWidth, maxTableWidth);
+        ImGui.BeginChild("WhoNeedsItContainer", new Vector2(childWidth, -1), false);
+
         // Create table with gear slots as rows and members as columns
         int columnCount = team.Members.Count + 1; // +1 for gear slot name column
         if (ImGui.BeginTable("WhoNeedsIt", columnCount, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
@@ -2025,6 +2195,68 @@ public class MainWindow : Window, IDisposable
                 ImGui.TableSetColumnIndex(0);
                 ImGui.Text(FormatSlotName(slotName));
 
+                // Build tooltip of who needs this gear
+                var membersNeedingGear = new List<(string name, bool isMain)>();
+                var altMembersNeedingGear = new List<(string name, int sheetIndex)>();
+                
+                for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
+                {
+                    var member = team.Members[memberIdx];
+                    var mainSheet = team.Sheets.Count > 0 ? team.Sheets[0] : null;
+                    var mainSheetMember = mainSheet != null && memberIdx < mainSheet.Members.Count ? mainSheet.Members[memberIdx] : null;
+                    
+                    if (mainSheetMember != null && mainSheetMember.Gear.TryGetValue(slotName, out var mainGearPiece))
+                    {
+                        bool needsForMain = mainGearPiece.DesiredSource == Models.GearSource.Savage && mainGearPiece.Source != Models.GearSource.Savage;
+                        if (needsForMain)
+                        {
+                            membersNeedingGear.Add((member.Name, true));
+                            continue;
+                        }
+                    }
+                    
+                    // Check alts if main doesn't need
+                    for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                    {
+                        var sheet = team.Sheets[sheetIdx];
+                        if (memberIdx < sheet.Members.Count)
+                        {
+                            var altMember = sheet.Members[memberIdx];
+                            if (altMember.Gear.TryGetValue(slotName, out var altGearPiece))
+                            {
+                                if (altGearPiece.DesiredSource == Models.GearSource.Savage && altGearPiece.Source != Models.GearSource.Savage)
+                                {
+                                    altMembersNeedingGear.Add((member.Name, sheetIdx));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Sort alt members by sheet index
+                altMembersNeedingGear = altMembersNeedingGear.OrderBy(x => x.sheetIndex).ToList();
+
+                if (ImGui.IsItemHovered() && (membersNeedingGear.Count > 0 || altMembersNeedingGear.Count > 0))
+                {
+                    ImGui.BeginTooltip();
+                    ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Members who need this:");
+                    
+                    // Show main sheet needs in red first
+                    foreach (var (name, _) in membersNeedingGear)
+                    {
+                        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), $"  {name}");
+                    }
+                    
+                    // Then show alt needs in pink, sorted by sheet index
+                    foreach (var (name, sheetIdx) in altMembersNeedingGear)
+                    {
+                        ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"  {name} (Alt Job {sheetIdx})");
+                    }
+                    
+                    ImGui.EndTooltip();
+                }
+
                 // Member columns with checkboxes
                 for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
                 {
@@ -2032,10 +2264,37 @@ public class MainWindow : Window, IDisposable
 
                     var member = team.Members[memberIdx];
 
-                    // Check if member desires Savage gear for this slot
-                    if (member.Gear.TryGetValue(slotName, out var gearPiece))
+                    // Always check Main sheet (sheet index 0) first
+                    var mainSheet = team.Sheets.Count > 0 ? team.Sheets[0] : null;
+                    var mainSheetMember = mainSheet != null && memberIdx < mainSheet.Members.Count ? mainSheet.Members[memberIdx] : null;
+                    
+                    if (mainSheetMember != null && mainSheetMember.Gear.TryGetValue(slotName, out var mainGearPiece))
                     {
-                        if (gearPiece.DesiredSource == Models.GearSource.Savage)
+                        bool needsForMain = mainGearPiece.DesiredSource == Models.GearSource.Savage && mainGearPiece.Source != Models.GearSource.Savage;
+                        
+                        // Check alt job sheets for this member (only if Main doesn't need it)
+                        int altSheetWithNeed = -1;
+                        if (!needsForMain)
+                        {
+                            for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                            {
+                                var sheet = team.Sheets[sheetIdx];
+                                if (memberIdx < sheet.Members.Count)
+                                {
+                                    var altMember = sheet.Members[memberIdx];
+                                    if (altMember.Gear.TryGetValue(slotName, out var altGearPiece))
+                                    {
+                                        if (altGearPiece.DesiredSource == Models.GearSource.Savage && altGearPiece.Source != Models.GearSource.Savage)
+                                        {
+                                            altSheetWithNeed = sheetIdx;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (needsForMain || altSheetWithNeed >= 0)
                         {
                             // Create unique key for checkbox
                             string checkboxKey = $"WhoNeedsIt_{memberIdx}_{slotName}";
@@ -2043,8 +2302,7 @@ public class MainWindow : Window, IDisposable
                             // Initialize checkbox state if not exists
                             if (!whoNeedsItCheckboxes.ContainsKey(checkboxKey))
                             {
-                                // Set checkbox to true if they already have it
-                                whoNeedsItCheckboxes[checkboxKey] = (gearPiece.Source == Models.GearSource.Savage);
+                                whoNeedsItCheckboxes[checkboxKey] = false;
                             }
 
                             bool isChecked = whoNeedsItCheckboxes[checkboxKey];
@@ -2054,10 +2312,18 @@ public class MainWindow : Window, IDisposable
                             }
                             else
                             {
-                                ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "NEED");
+                                // Prioritize Main sheet need (red) over alt sheet need (pink)
+                                if (needsForMain)
+                                {
+                                    ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "NEED");
+                                }
+                                else if (altSheetWithNeed >= 0)
+                                {
+                                    // Pink color for alt sheet needs
+                                    ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"NEED (Alt Job {altSheetWithNeed})");
+                                }
                             }
                         }
-                        // If they don't desire Savage gear, show nothing
                     }
                 }
             }
@@ -2072,16 +2338,62 @@ public class MainWindow : Window, IDisposable
                 ImGui.TableSetColumnIndex(0);
                 ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), $"Floor {floor} Pages");
 
-                for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
+                // Always use main sheet members for pages
+                var mainSheetMembers = team.Sheets.Count > 0 ? team.Sheets[0].Members : new List<Models.RaidMember>();
+                
+                for (int memberIdx = 0; memberIdx < mainSheetMembers.Count; memberIdx++)
                 {
                     ImGui.TableSetColumnIndex(memberIdx + 1);
-                    var member = team.Members[memberIdx];
+                    var member = mainSheetMembers[memberIdx];
+                    
+                    // Main sheet pages needed
                     int pagesNeeded = CalculatePagesNeededForFloor(member, floor);
                     int pagesFromClears = GetPagesFromClears(team, floor);
                     int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
                     int totalPages = pagesFromClears + pageAdjustment;
                     int remainingPages = Math.Max(0, pagesNeeded - totalPages);
+                    
+                    // Check alt sheets for pages needed
+                    var altPagesBreakdown = new List<int>();
+                    if (team.Sheets.Count > 1)
+                    {
+                        for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                        {
+                            var sheet = team.Sheets[sheetIdx];
+                            if (memberIdx < sheet.Members.Count)
+                            {
+                                var altMember = sheet.Members[memberIdx];
+                                int altPagesForSheet = CalculatePagesNeededForFloor(altMember, floor);
+                                altPagesBreakdown.Add(altPagesForSheet);
+                            }
+                        }
+                    }
+                    
+                    int totalAltPages = altPagesBreakdown.Sum();
+                    
+                    // Display main pages, then alt pages in pink if there are any
                     ImGui.Text(remainingPages.ToString());
+                    if (totalAltPages > 0)
+                    {
+                        ImGui.SameLine(0, 5);
+                        ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"+{totalAltPages}");
+                    }
+                    
+                    // Tooltip showing breakdown
+                    if (ImGui.IsItemHovered())
+                    {
+                        ImGui.BeginTooltip();
+                        ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"Pages needed for {member.Name}:");
+                        ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), $"  Main: {pagesNeeded}");
+                        
+                        for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                        {
+                            int altPagesForThisSheet = sheetIdx - 1 < altPagesBreakdown.Count ? altPagesBreakdown[sheetIdx - 1] : 0;
+                            ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"  Alt Job {sheetIdx}: {altPagesForThisSheet}");
+                        }
+                        
+                        ImGui.EndTooltip();
+                    }
                 }
             }
 
@@ -2113,5 +2425,7 @@ public class MainWindow : Window, IDisposable
 
             ImGui.EndTable();
         }
+
+        ImGui.EndChild();
     }
 }
