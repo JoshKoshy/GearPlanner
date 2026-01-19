@@ -1532,9 +1532,37 @@ public class MainWindow : Window, IDisposable
             if (itemsForJob.Count == 0)
                 return 0;
 
-            // Return the first matching item's ID
-            // User can right-click to clear if they want a different item
-            return itemsForJob.First().Id;
+            // Filter to items matching the gear slot
+            if (System.Enum.TryParse<GearSlot>(slotName, out var requestedSlot))
+            {
+                // Special handling for Ring2: accept Ring1 items (rings are interchangeable in FFXIV)
+                var filterSlot = requestedSlot == GearSlot.Ring2 ? GearSlot.Ring1 : requestedSlot;
+                
+                var itemsForSlot = itemsForJob.Where(item => item.Slot == filterSlot).ToList();
+                Plugin.Log.Debug($"[FindItemIdForGearSlot] Slot: {slotName} ({requestedSlot}), Job: {job}, Source: {source}");
+                Plugin.Log.Debug($"[FindItemIdForGearSlot] Total items for source: {itemsForSource.Count}");
+                Plugin.Log.Debug($"[FindItemIdForGearSlot] Items for job: {itemsForJob.Count}");
+                Plugin.Log.Debug($"[FindItemIdForGearSlot] Items for slot: {itemsForSlot.Count}");
+                
+                // Debug: Log all items found for this slot
+                foreach (var item in itemsForSlot)
+                {
+                    Plugin.Log.Debug($"[FindItemIdForGearSlot]   - {item.Id} {item.Name} (Slot: {item.Slot})");
+                }
+                
+                if (itemsForSlot.Count > 0)
+                {
+                    var firstItem = itemsForSlot.First();
+                    Plugin.Log.Debug($"[FindItemIdForGearSlot] Selected item: {firstItem.Id} - {firstItem.Name} (Slot: {firstItem.Slot})");
+                    return firstItem.Id;
+                }
+            }
+
+            // Fallback: return first matching item if no slot match found
+            Plugin.Log.Debug($"[FindItemIdForGearSlot] No slot match found, using fallback");
+            var fallbackItem = itemsForJob.First();
+            Plugin.Log.Debug($"[FindItemIdForGearSlot] Fallback item: {fallbackItem.Id} - {fallbackItem.Name} (Slot: {fallbackItem.Slot})");
+            return fallbackItem.Id;
         }
         catch (Exception ex)
         {

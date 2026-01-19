@@ -12,7 +12,7 @@ namespace GearPlanner.Helpers;
 /// </summary>
 public static class ItemDatabase
 {
-    public record Item(uint Id, string Name, GearSource Category, string[] Jobs);
+    public record Item(uint Id, string Name, GearSource Category, string[] Jobs, GearSlot? Slot);
 
     private static List<Item>? _cachedItems;
     private static bool _initialized = false;
@@ -65,11 +65,11 @@ public static class ItemDatabase
 
             // Combine and cache
             _cachedItems = new List<Item>();
-            _cachedItems.AddRange(savageItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs)));
-            _cachedItems.AddRange(tomeUpItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs)));
-            _cachedItems.AddRange(craftedItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs)));
-            _cachedItems.AddRange(tomeItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs)));
-            _cachedItems.AddRange(prepItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs)));
+            _cachedItems.AddRange(savageItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
+            _cachedItems.AddRange(tomeUpItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
+            _cachedItems.AddRange(craftedItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
+            _cachedItems.AddRange(tomeItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
+            _cachedItems.AddRange(prepItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
 
             _initialized = true;
             Plugin.Log.Information($"ItemDatabase initialized with {_cachedItems.Count} items");

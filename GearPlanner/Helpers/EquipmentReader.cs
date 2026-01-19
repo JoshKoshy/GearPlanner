@@ -40,11 +40,11 @@ public static class EquipmentReader
                 null,                 // 5 - Waist (skip)
                 GearSlot.Legs,        // 6
                 GearSlot.Feet,        // 7
-                GearSlot.Ears,      // 8
+                GearSlot.Wrists,      // 8
                 GearSlot.Neck,        // 9
-                GearSlot.Wrists,       // 10
-                GearSlot.Ring1,       // 11
-                GearSlot.Ring2         // 12 - SoulCrystal
+                GearSlot.Ring1,       // 10
+                GearSlot.Ring2,       // 11
+                null                  // 12 - SoulCrystal (skip)
             };
 
             for (int idx = 0; idx < equippedItems.Length && idx < slotMappingByIndex.Length; idx++)

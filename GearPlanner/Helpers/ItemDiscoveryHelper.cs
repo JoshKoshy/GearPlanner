@@ -22,12 +22,12 @@ public static class ItemDiscoveryHelper
     /// <param name="searchPattern">Name pattern to search for (e.g., "Grand Champion's")</param>
     /// <param name="jobAssignments">Dictionary mapping item ID to job codes</param>
     /// <returns>List of discovered items with their metadata</returns>
-    public static List<(uint Id, string Name, GearSource Category, string[] Jobs)> DiscoverItems(
+    public static List<(uint Id, string Name, GearSource Category, string[] Jobs, GearSlot? Slot)> DiscoverItems(
         IDataManager dataManager,
         string searchPattern,
         Dictionary<uint, string[]> jobAssignments)
     {
-        var results = new List<(uint, string, GearSource, string[])>();
+        var results = new List<(uint, string, GearSource, string[], GearSlot?)>();
 
         try
         {
@@ -66,7 +66,10 @@ public static class ItemDiscoveryHelper
                     ? jobAssignments[item.RowId]
                     : GetJobsFromGameData(item, jobCodeMap);
 
-                results.Add((item.RowId, itemName, category, jobs));
+                // Determine gear slot from game data
+                var slot = GetGearSlotFromItem(item);
+
+                results.Add((item.RowId, itemName, category, jobs, slot));
             }
         }
         catch (Exception ex)
@@ -409,4 +412,54 @@ public static class ItemDiscoveryHelper
             return null;
         }
     }
+
+    /// <summary>
+    /// Determine the gear slot for an item from its EquipSlotCategory RowId.
+    /// Uses a hardcoded mapping of FFXIV EquipSlotCategory RowIds to GearSlot.
+    /// </summary>
+    private static GearSlot? GetGearSlotFromItem(Item item)
+    {
+        try
+        {
+            if (item.EquipSlotCategory.RowId == 0)
+                return null;
+
+            var rowId = item.EquipSlotCategory.RowId;
+            
+            // Log RowIds for weapons and rings so we can verify the mapping
+            if (item.Name.ToString().Contains("Ring", StringComparison.OrdinalIgnoreCase) ||
+                item.Name.ToString().Contains("Sawback", StringComparison.OrdinalIgnoreCase) ||
+                item.Name.ToString().Contains("Falchion", StringComparison.OrdinalIgnoreCase))
+            {
+                Plugin.Log.Debug($"[GetGearSlotFromItem] Item {item.RowId} ({item.Name}) has EquipSlotCategory RowId: {rowId}");
+            }
+
+            // Map EquipSlotCategory RowIds to GearSlot
+            // These RowIds are fixed in FFXIV data
+            return rowId switch
+            {
+                1 => GearSlot.MainHand,      // One-handed weapon
+                2 => GearSlot.MainHand,      // Two-handed weapon (treated as MainHand)
+                3 => GearSlot.Head,          // Head gear
+                4 => GearSlot.Body,          // Body/Chest
+                5 => GearSlot.Hands,         // Gloves/Hands
+                6 => null,                   // Waist (skip)
+                7 => GearSlot.Legs,          // Legs/Pants
+                8 => GearSlot.Feet,          // Feet/Shoes
+                9 => GearSlot.Ears,          // Earrings
+                10 => GearSlot.Neck,         // Necklace
+                11 => GearSlot.Wrists,       // Bracelets/Wrists
+                12 => GearSlot.Ring1,        // Rings (FingerL and FingerR)
+                13 => GearSlot.MainHand,     // Off-hand/Shield or alternate weapon slot
+                _ => null                    // Unknown or non-equipable
+            };
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Debug($"[GetGearSlotFromItem] Error determining gear slot for item {item.RowId}: {ex.Message}");
+        }
+
+        return null;
+    }
 }
+
