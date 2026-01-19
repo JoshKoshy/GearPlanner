@@ -1150,46 +1150,46 @@ public class MainWindow : Window, IDisposable
             // Header row
             ImGui.TableHeadersRow();
 
-            // Pages row
+            // Books row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.Text("Pages");
+            ImGui.Text("Books");
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
-                int pagesFromClears = GetPagesFromClears(team, floor);
-                int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
-                int totalPages = pagesFromClears + pageAdjustment;
-                ImGui.Text(totalPages.ToString());
+                int pagesFromClears = GetBooksFromClears(team, floor);
+                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int totalBooks = pagesFromClears + pageAdjustment;
+                ImGui.Text(totalBooks.ToString());
             }
 
-            // Pages Needed row
+            // Books Needed row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.Text("Pages Needed");
+            ImGui.Text("Books Needed");
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
-                int pagesNeeded = CalculatePagesNeededForFloor(member, floor);
-                int pagesFromClears = GetPagesFromClears(team, floor);
-                int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
-                int totalPages = pagesFromClears + pageAdjustment;
-                int remainingPages = Math.Max(0, pagesNeeded - totalPages);
-                ImGui.Text(remainingPages.ToString());
+                int pagesNeeded = CalculateBooksNeededForFloor(member, floor);
+                int pagesFromClears = GetBooksFromClears(team, floor);
+                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int totalBooks = pagesFromClears + pageAdjustment;
+                int remainingBooks = Math.Max(0, pagesNeeded - totalBooks);
+                ImGui.Text(remainingBooks.ToString());
             }
 
-            // Page Adjust row
+            // Book Adjust row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.Text("Page Adjust");
+            ImGui.Text("Book Adjust");
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
                 ImGui.SetNextItemWidth(35);
-                int adjustValue = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
-                if (ImGui.InputInt($"##PageAdjust{memberIdx}_{floor}", ref adjustValue))
+                int adjustValue = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                if (ImGui.InputInt($"##BookAdjust{memberIdx}_{floor}", ref adjustValue))
                 {
-                    member.PageAdjustments[floor] = adjustValue;
+                    member.BookAdjustments[floor] = adjustValue;
                     plugin.Configuration.Save();
                 }
             }
@@ -1277,7 +1277,7 @@ public class MainWindow : Window, IDisposable
         };
     }
 
-    private int CalculatePagesNeededForFloor(Models.RaidMember member, int floor)
+    private int CalculateBooksNeededForFloor(Models.RaidMember member, int floor)
     {
         // Map floors to gear slots that drop on each floor
         // This is based on standard FFXIV Savage tier loot distribution
@@ -1369,7 +1369,7 @@ public class MainWindow : Window, IDisposable
         return twinesNeeded;
     }
 
-    private int GetPagesFromClears(Models.RaidTeam team, int floor)
+    private int GetBooksFromClears(Models.RaidTeam team, int floor)
     {
         // Each clear of a floor gives a certain number of pages
         // In FFXIV, each savage floor clear gives pages that can be used for gear
@@ -1727,10 +1727,10 @@ public class MainWindow : Window, IDisposable
             // Header row
             ImGui.TableHeadersRow();
 
-            // Pages row
+            // Books row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.Text("Pages");
+            ImGui.Text("Books");
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
@@ -1740,15 +1740,15 @@ public class MainWindow : Window, IDisposable
                 else if (floor == 3) floorClears = sheet.Floor3Clears;
                 else if (floor == 4) floorClears = sheet.Floor4Clears;
                 
-                int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
-                int totalPages = member.PagesEarned + floorClears + pageAdjustment;
-                ImGui.Text(totalPages.ToString());
+                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int totalBooks = member.BooksEarned + floorClears + pageAdjustment;
+                ImGui.Text(totalBooks.ToString());
             }
 
-            // Pages Needed row
+            // Books Needed row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.Text("Pages Needed");
+            ImGui.Text("Books Needed");
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
@@ -1758,11 +1758,11 @@ public class MainWindow : Window, IDisposable
                 else if (floor == 3) floorClears = sheet.Floor3Clears;
                 else if (floor == 4) floorClears = sheet.Floor4Clears;
                 
-                int pagesNeeded = CalculatePagesNeededForFloor(member, floor);
-                int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
-                int totalPages = member.PagesEarned + floorClears + pageAdjustment;
-                int remainingPages = Math.Max(0, pagesNeeded - totalPages);
-                ImGui.Text(remainingPages.ToString());
+                int pagesNeeded = CalculateBooksNeededForFloor(member, floor);
+                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int totalBooks = member.BooksEarned + floorClears + pageAdjustment;
+                int remainingBooks = Math.Max(0, pagesNeeded - totalBooks);
+                ImGui.Text(remainingBooks.ToString());
             }
 
             ImGui.EndTable();
@@ -2418,12 +2418,12 @@ public class MainWindow : Window, IDisposable
             // Add summary rows below gear slots
             ImGui.Spacing();
 
-            // Pages Needed by floor rows
+            // Books Needed by floor rows
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableNextRow();
                 ImGui.TableSetColumnIndex(0);
-                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), $"Floor {floor} Pages");
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), $"Floor {floor} Books");
 
                 // Always use main sheet members for pages
                 var mainSheetMembers = team.Sheets.Count > 0 ? team.Sheets[0].Members : new List<Models.RaidMember>();
@@ -2434,14 +2434,14 @@ public class MainWindow : Window, IDisposable
                     var member = mainSheetMembers[memberIdx];
                     
                     // Main sheet pages needed
-                    int pagesNeeded = CalculatePagesNeededForFloor(member, floor);
-                    int pagesFromClears = GetPagesFromClears(team, floor);
-                    int pageAdjustment = member.PageAdjustments.ContainsKey(floor) ? member.PageAdjustments[floor] : 0;
-                    int totalPages = pagesFromClears + pageAdjustment;
-                    int remainingPages = Math.Max(0, pagesNeeded - totalPages);
+                    int pagesNeeded = CalculateBooksNeededForFloor(member, floor);
+                    int pagesFromClears = GetBooksFromClears(team, floor);
+                    int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                    int totalBooks = pagesFromClears + pageAdjustment;
+                    int remainingBooks = Math.Max(0, pagesNeeded - totalBooks);
                     
                     // Check alt sheets for pages needed
-                    var altPagesBreakdown = new List<int>();
+                    var altBooksBreakdown = new List<int>();
                     if (team.Sheets.Count > 1)
                     {
                         for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
@@ -2450,33 +2450,33 @@ public class MainWindow : Window, IDisposable
                             if (memberIdx < sheet.Members.Count)
                             {
                                 var altMember = sheet.Members[memberIdx];
-                                int altPagesForSheet = CalculatePagesNeededForFloor(altMember, floor);
-                                altPagesBreakdown.Add(altPagesForSheet);
+                                int altBooksForSheet = CalculateBooksNeededForFloor(altMember, floor);
+                                altBooksBreakdown.Add(altBooksForSheet);
                             }
                         }
                     }
                     
-                    int totalAltPages = altPagesBreakdown.Sum();
+                    int totalAltBooks = altBooksBreakdown.Sum();
                     
                     // Display main pages, then alt pages in pink if there are any
-                    ImGui.Text(remainingPages.ToString());
-                    if (totalAltPages > 0)
+                    ImGui.Text(remainingBooks.ToString());
+                    if (totalAltBooks > 0)
                     {
                         ImGui.SameLine(0, 5);
-                        ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"+{totalAltPages}");
+                        ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"+{totalAltBooks}");
                     }
                     
                     // Tooltip showing breakdown
                     if (ImGui.IsItemHovered())
                     {
                         ImGui.BeginTooltip();
-                        ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"Pages needed for {member.Name}:");
+                        ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"Books needed for {member.Name}:");
                         ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), $"  Main: {pagesNeeded}");
                         
                         for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
                         {
-                            int altPagesForThisSheet = sheetIdx - 1 < altPagesBreakdown.Count ? altPagesBreakdown[sheetIdx - 1] : 0;
-                            ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"  Alt Job {sheetIdx}: {altPagesForThisSheet}");
+                            int altBooksForThisSheet = sheetIdx - 1 < altBooksBreakdown.Count ? altBooksBreakdown[sheetIdx - 1] : 0;
+                            ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"  Alt Job {sheetIdx}: {altBooksForThisSheet}");
                         }
                         
                         ImGui.EndTooltip();

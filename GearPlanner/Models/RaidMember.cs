@@ -10,10 +10,10 @@ public class RaidMember
     public string Job { get; set; } = string.Empty;
     public JobRole Role { get; set; } = JobRole.Unknown;
     public Dictionary<string, GearPiece> Gear { get; set; } = new();
-    public int PagesEarned { get; set; } = 0;
+    public int BooksEarned { get; set; } = 0;
     public int TokensEarned { get; set; } = 0;
     public DateTime LastUpdated { get; set; } = DateTime.Now;
-    public Dictionary<int, int> PageAdjustments { get; set; } = new() { { 1, 0 }, { 2, 0 }, { 3, 0 }, { 4, 0 } };
+    public Dictionary<int, int> BookAdjustments { get; set; } = new() { { 1, 0 }, { 2, 0 }, { 3, 0 }, { 4, 0 } };
     public Dictionary<int, int> FloorClears { get; set; } = new() { { 1, 0 }, { 2, 0 }, { 3, 0 }, { 4, 0 } };
     
     public RaidMember() { }
