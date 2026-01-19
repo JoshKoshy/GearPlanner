@@ -332,7 +332,7 @@ public class MainWindow : Window, IDisposable
                                 {
                                     Helpers.EquipmentReader.SyncTargetEquipmentToMember(member, Plugin.GameInventory);
                                     plugin.Configuration.Save();
-                                }, TimeSpan.FromMilliseconds(1));
+                                }, TimeSpan.FromSeconds(2));
                             });
                         }
                         else
@@ -402,6 +402,93 @@ public class MainWindow : Window, IDisposable
                 ImGui.Spacing();
                 
                 DrawMaterialsTableForIndividualMember(member);
+                
+                ImGui.EndChild();
+            }
+
+            // Right - Mini Who Needs It for individual sheet
+            ImGui.NextColumn();
+            if (ImGui.BeginChild("IndividualWhoNeedsIt", new Vector2(legendMinWidth - 10, -1), true))
+            {
+                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Need It?");
+                ImGui.Separator();
+                
+                // Get all gear slots
+                var gearSlots = System.Enum.GetNames(typeof(Models.GearSlot));
+                
+                // Create mini table with gear slots
+                if (ImGui.BeginTable("IndividualWhoNeedsItTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+                {
+                    ImGui.TableSetupColumn("Gear", ImGuiTableColumnFlags.WidthFixed, 80);
+                    ImGui.TableSetupColumn("Need", ImGuiTableColumnFlags.WidthFixed, legendMinWidth - 120);
+                    
+                    ImGui.TableHeadersRow();
+                    
+                    // Check each gear slot
+                    foreach (var slotName in gearSlots)
+                    {
+                        // Check all sheets and collect which ones need this item
+                        var sheetsNeedingGear = new List<string>();
+                        
+                        foreach (var sheet in individualTabSheets)
+                        {
+                            bool sheetNeedsThisItem = false;
+                            foreach (var sheetMember in sheet.Members)
+                            {
+                                if (sheetMember.Gear.TryGetValue(slotName, out var gearPiece))
+                                {
+                                    if (gearPiece.DesiredSource == Models.GearSource.Savage && 
+                                        gearPiece.Source != Models.GearSource.Savage)
+                                    {
+                                        sheetNeedsThisItem = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (sheetNeedsThisItem)
+                            {
+                                sheetsNeedingGear.Add(sheet.Name);
+                            }
+                        }
+                        
+                        bool needsItem = sheetsNeedingGear.Count > 0;
+                        
+                        ImGui.TableNextRow();
+                        ImGui.TableSetColumnIndex(0);
+                        
+                        if (needsItem)
+                        {
+                            ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), FormatSlotName(slotName));
+                        }
+                        else
+                        {
+                            ImGui.Text(FormatSlotName(slotName));
+                        }
+                        
+                        ImGui.TableSetColumnIndex(1);
+                        if (needsItem)
+                        {
+                            ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "YES");
+                            
+                            // Add hover text showing all sheets that need this gear
+                            if (ImGui.IsItemHovered())
+                            {
+                                ImGui.BeginTooltip();
+                                foreach (var sheetName in sheetsNeedingGear)
+                                {
+                                    ImGui.Text(sheetName);
+                                }
+                                ImGui.EndTooltip();
+                            }
+                        }
+                        else
+                        {
+                            ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "NO");
+                        }
+                    }
+                    
+                    ImGui.EndTable();
+                }
                 
                 ImGui.EndChild();
             }
