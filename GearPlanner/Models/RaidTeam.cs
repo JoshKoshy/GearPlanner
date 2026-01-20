@@ -21,20 +21,25 @@ public class RaidTeam
     public int Floor4Clears { get; set; } = 0;
     
     // Convenience properties for backward compatibility and default sheet access
+    // JsonIgnore prevents this proxy property from being serialized, avoiding duplication
+    [Newtonsoft.Json.JsonIgnore]
     public List<RaidMember> Members
     {
         get => SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count ? Sheets[SelectedSheetIndex].Members : new();
         set
         {
+            Plugin.Log.Debug($"[Members.set] Setting Members for sheet at index {SelectedSheetIndex}");
             if (SelectedSheetIndex >= 0 && SelectedSheetIndex < Sheets.Count)
             {
                 Sheets[SelectedSheetIndex].Members = value;
+                Plugin.Log.Debug($"[Members.set] Set {value.Count} members");
             }
         }
     }
     
     public RaidTeam() 
     {
+        Plugin.Log.Debug($"[RaidTeam] Parameterless constructor called");
         // Don't add a default sheet here - this is called during JSON deserialization
         // and would duplicate sheets that already exist in the JSON
         // Cleanup will be called after deserialization in Plugin.cs
@@ -42,62 +47,36 @@ public class RaidTeam
     
     public RaidTeam(string name)
     {
+        Plugin.Log.Debug($"[RaidTeam] Constructor called with name: {name}");
         Name = name;
         // Only add default Main sheet for newly created teams (not during deserialization)
         if (Sheets.Count == 0)
         {
+            Plugin.Log.Debug($"[RaidTeam] Adding default Main sheet");
             Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
             SelectedSheetIndex = 0;
         }
     }
     
     /// <summary>
-    /// Removes duplicate sheets with the same name, keeping only the first occurrence.
+    /// Removes duplicate members with the same name, keeping only the first occurrence.
     /// This is called after deserialization to clean up any duplicates.
-    /// </summary>
-    public void CleanupDuplicateSheets()
-    {
-        var sheetNames = new HashSet<string>();
-        var sheetsToRemove = new List<GearSheet>();
-        
-        Plugin.Log.Debug($"[CleanupDuplicateSheets] Checking team '{Name}' with {Sheets.Count} sheets");
-        
-        foreach (var sheet in Sheets)
-        {
-            if (sheetNames.Contains(sheet.Name))
-            {
-                // This is a duplicate
-                Plugin.Log.Warning($"[CleanupDuplicateSheets] Found duplicate sheet: '{sheet.Name}'");
-                sheetsToRemove.Add(sheet);
-            }
-            else
-            {
-                Plugin.Log.Debug($"[CleanupDuplicateSheets] Sheet '{sheet.Name}' is unique");
-                sheetNames.Add(sheet.Name);
-            }
-        }
-        
-        // Remove duplicates
-        foreach (var sheet in sheetsToRemove)
-        {
-            Plugin.Log.Warning($"[CleanupDuplicateSheets] Removing duplicate sheet: '{sheet.Name}'");
-            Sheets.Remove(sheet);
-        }
-        
-        Plugin.Log.Debug($"[CleanupDuplicateSheets] Team '{Name}' now has {Sheets.Count} sheets");
-        
-        // Ensure SelectedSheetIndex is valid
-        if (SelectedSheetIndex < 0 || SelectedSheetIndex >= Sheets.Count)
-        {
-            SelectedSheetIndex = Sheets.Count > 0 ? 0 : -1;
-        }
-    }
+
     
     public void AddMember(RaidMember member)
     {
+        var stackTrace = Environment.StackTrace;
+        Plugin.Log.Debug($"[AddMember] Called for member '{member.Name}' in team '{Name}'");
+        Plugin.Log.Debug($"[AddMember] Stack: {stackTrace.Split('\n')[1]}");
+        
         if (!Members.Any(m => m.Name.Equals(member.Name, StringComparison.OrdinalIgnoreCase)))
         {
+            Plugin.Log.Debug($"[AddMember] Adding member '{member.Name}' to team '{Name}'");
             Members.Add(member);
+        }
+        else
+        {
+            Plugin.Log.Warning($"[AddMember] Member '{member.Name}' already exists in team '{Name}', skipping");
         }
     }
     

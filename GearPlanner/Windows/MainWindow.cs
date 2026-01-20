@@ -50,12 +50,6 @@ public class MainWindow : Window, IDisposable
         // Header
         ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Gear Planner");
         ImGui.SameLine();
-        if (ImGui.Button("Settings", new Vector2(80, 0)))
-        {
-            plugin.ToggleConfigUi();
-        }
-        ImGui.SameLine();
-        ImGui.TextDisabled("(Use /gp config to manage teams and members)");
 
         ImGui.Separator();
 
@@ -1969,7 +1963,7 @@ public class MainWindow : Window, IDisposable
         ImGui.PopStyleColor();
     }
 
-    private void DrawLootPlannerTab()
+    private void DrawLootPlannerTab() //test12
     {
         if (plugin.Configuration.RaidTeams.Count == 0)
         {

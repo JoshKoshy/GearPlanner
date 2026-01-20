@@ -10,7 +10,6 @@ public class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 0;
 
-    public bool IsConfigWindowMovable { get; set; } = true;
     public bool IsMainWindowMovable { get; set; } = true;
     public List<RaidTeam> RaidTeams { get; set; } = new();
     public int SelectedTeamIndex { get; set; } = -1;
@@ -23,6 +22,15 @@ public class Configuration : IPluginConfiguration
         try
         {
             Plugin.Log.Debug($"[Configuration.Save] Saving configuration...");
+            // Log the teams being saved
+            foreach (var team in RaidTeams)
+            {
+                Plugin.Log.Debug($"[Configuration.Save] Team '{team.Name}': {team.Members.Count} members, {team.Sheets.Count} sheets");
+                for (int i = 0; i < team.Sheets.Count; i++)
+                {
+                    Plugin.Log.Debug($"[Configuration.Save]   Sheet {i} '{team.Sheets[i].Name}': {team.Sheets[i].Members.Count} members");
+                }
+            }
             Plugin.PluginInterface.SavePluginConfig(this);
             Plugin.Log.Information($"[Configuration.Save] Configuration saved successfully");
         }
