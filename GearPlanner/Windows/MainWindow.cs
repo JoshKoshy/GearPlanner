@@ -324,7 +324,7 @@ public class MainWindow : Window, IDisposable
                 // Import BiS button
                 if (ImGui.Button("Import BiS##IndividualBiS", new Vector2(-1, 0)))
                 {
-                    ImGui.OpenPopup("XivGearImportPopupIndividual");
+                    ImGui.OpenPopup("Import BiS");
                 }
 
                 // Sync buttons
@@ -364,7 +364,7 @@ public class MainWindow : Window, IDisposable
                 }
 
                 // Import dialog for xivgear.app
-                if (ImGui.BeginPopupModal("XivGearImportPopupIndividual", ImGuiWindowFlags.AlwaysAutoResize))
+                if (ImGui.BeginPopupModal("Import BiS", ImGuiWindowFlags.AlwaysAutoResize))
                 {
                     // Initialize tab state
                     if (!memberBiSSetIndex.ContainsKey(-2))
@@ -415,6 +415,12 @@ public class MainWindow : Window, IDisposable
                                     ImportBiSSet(member, bisSets[selectedIndex]);
                                     ImGui.CloseCurrentPopup();
                                 }
+                            }
+
+                            ImGui.SameLine();
+                            if (ImGui.Button("Cancel##PresetCancel", new Vector2(100, 0)))
+                            {
+                                ImGui.CloseCurrentPopup();
                             }
                         }
                         else
