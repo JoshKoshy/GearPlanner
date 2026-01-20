@@ -31,18 +31,22 @@ public sealed class Plugin : IDalamudPlugin
     public BiSLibrary BiSLibrary { get; init; }
 
     public readonly WindowSystem WindowSystem = new("GearPlanner");
-    private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
     private SetupWindow SetupWindow { get; init; }
 
     public Plugin()
     {
-        Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        Plugin.Log.Information("[Plugin] Initializing GearPlanner plugin...");
         
-        // Clean up any duplicate sheets that may have been created on deserialization
-        foreach (var team in Configuration.RaidTeams)
+        Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        Plugin.Log.Information($"[Plugin] Configuration loaded. RaidTeams count: {Configuration.RaidTeams.Count}");
+        
+        if (Configuration.RaidTeams.Count > 0)
         {
-            team.CleanupDuplicateSheets();
+            foreach (var team in Configuration.RaidTeams)
+            {
+                Plugin.Log.Debug($"[Plugin] Team: {team.Name}, Members: {team.Members.Count}, Sheets: {team.Sheets.Count}");
+            }
         }
         
         // Initialize ItemDatabase from game data
@@ -50,29 +54,44 @@ public sealed class Plugin : IDalamudPlugin
         
         // Initialize BiS library
         var configPath = PluginInterface.GetPluginConfigDirectory();
+        Plugin.Log.Information($"[Plugin] Config path: {configPath}");
         BiSLibrary = new BiSLibrary(configPath);
         BiSLibrary.LoadBiSSets();
         
         // Initialize ECommons
         ECommons.ECommonsMain.Init(PluginInterface, this);
 
-        // Create sample team if this is first launch
-        bool isFirstLaunch = Configuration.RaidTeams.Count == 0;
-        if (isFirstLaunch)
+        // Create sample team ONLY if no teams exist at all
+        bool hasSampleTeam = Configuration.RaidTeams.Any(t => t.Name == "Sample Raid Team");
+        
+        // Log detailed team info right after loading
+        Plugin.Log.Debug($"[Plugin] After loading configuration:");
+        foreach (var team in Configuration.RaidTeams)
+        {
+            Plugin.Log.Debug($"[Plugin]   Team '{team.Name}': {team.Members.Count} members (via Members property)");
+            for (int i = 0; i < team.Sheets.Count; i++)
+            {
+                Plugin.Log.Debug($"[Plugin]     Sheet {i} '{team.Sheets[i].Name}': {team.Sheets[i].Members.Count} members (direct access)");
+            }
+        }
+        
+        if (Configuration.RaidTeams.Count == 0 && !hasSampleTeam)
         {
             CreateSampleTeam();
         }
+        else if (hasSampleTeam)
+        {
+            Plugin.Log.Information("[Plugin] Sample team already exists, skipping creation");
+        }
 
-        ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);
         SetupWindow = new SetupWindow(this);
 
-        WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);
         WindowSystem.AddWindow(SetupWindow);
 
-        // Show setup window on first launch
-        if (isFirstLaunch)
+        // Show setup window on first launch (when no teams exist)
+        if (Configuration.RaidTeams.Count == 0)
         {
             SetupWindow.IsOpen = true;
         }
@@ -85,9 +104,7 @@ public sealed class Plugin : IDalamudPlugin
         // Tell the UI system that we want our windows to be drawn through the window system
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
 
-        // This adds a button to the plugin installer entry of this plugin which allows
-        // toggling the display status of the configuration ui
-        PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUi;
+
 
         // Adds another button doing the same but for the main ui of the plugin
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
@@ -99,12 +116,11 @@ public sealed class Plugin : IDalamudPlugin
     {
         // Unregister all actions to not leak anything during disposal of plugin
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
-        PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         
         WindowSystem.RemoveAllWindows();
 
-        ConfigWindow.Dispose();
+
         MainWindow.Dispose();
         SetupWindow.Dispose();
 
@@ -117,9 +133,6 @@ public sealed class Plugin : IDalamudPlugin
         
         switch (subcommand.ToLower())
         {
-            case "config":
-                ToggleConfigUi();
-                break;
             case "show":
                 ToggleMainUi();
                 break;
@@ -135,19 +148,12 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
     
-    public void ToggleConfigUi() => ConfigWindow.Toggle();
+
     public void ToggleMainUi() => MainWindow.Toggle();
 
     private void CreateSampleTeam()
     {
-        // Check if sample team already exists and has sheets - skip if it does
-        var existingSampleTeam = Configuration.RaidTeams.FirstOrDefault(t => t.Name == "Sample Raid Team");
-        if (existingSampleTeam != null && existingSampleTeam.Sheets.Count > 0)
-        {
-            Log.Information("Sample team already exists with sheets, skipping recreation");
-            return;
-        }
-        
+        Plugin.Log.Information("[CreateSampleTeam] Creating new sample team...");
         var sampleTeam = new RaidTeam("Sample Raid Team");
         sampleTeam.Description = "Edit this team to get started! Change names, jobs, and track gear progression.";
         
