@@ -1,7 +1,7 @@
 {
   "Author": "Koshy",
   "Name": "Gear Planner",
-  "AssemblyVersion": "1.0.0.9",
+  "AssemblyVersion": "1.0.0.10",
   "Punchline": "Raid team gear distribution and BiS planning tool.",
   "Description": "Helps FFXIV raid teams plan gear distribution, track BiS gear, and manage alt gear.",
   "ApplicableVersion": "any",
