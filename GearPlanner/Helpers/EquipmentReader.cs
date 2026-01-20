@@ -29,7 +29,7 @@ public static class EquipmentReader
             // Map equipment array indices to GearSlot enum
             // FFXIV equipment array order (correct):
             // 0=MainHand, 1=OffHand, 2=Head, 3=Body, 4=Hands, 5=Waist, 6=Legs, 7=Feet,
-            // 8=Wrists, 9=Neck, 10=Ring1, 11=Ring2, 12=SoulCrystal
+            // 8=Ears, 9=Neck, 10=Wrists, 11=Ring1, 12=Ring2, 13=SoulCrystal
             var slotMappingByIndex = new GearSlot?[]
             {
                 GearSlot.MainHand,    // 0
@@ -40,11 +40,12 @@ public static class EquipmentReader
                 null,                 // 5 - Waist (skip)
                 GearSlot.Legs,        // 6
                 GearSlot.Feet,        // 7
-                GearSlot.Wrists,      // 8
+                GearSlot.Ears,        // 8
                 GearSlot.Neck,        // 9
-                GearSlot.Ring1,       // 10
-                GearSlot.Ring2,       // 11
-                null                  // 12 - SoulCrystal (skip)
+                GearSlot.Wrists,      // 10
+                GearSlot.Ring1,       // 11
+                GearSlot.Ring2,       // 12
+                null                  // 13 - SoulCrystal (skip)
             };
 
             for (int idx = 0; idx < equippedItems.Length && idx < slotMappingByIndex.Length; idx++)
