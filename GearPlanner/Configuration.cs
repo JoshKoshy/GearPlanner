@@ -20,6 +20,15 @@ public class Configuration : IPluginConfiguration
     // The below exists just to make saving less cumbersome
     public void Save()
     {
-        Plugin.PluginInterface.SavePluginConfig(this);
+        try
+        {
+            Plugin.Log.Debug($"[Configuration.Save] Saving configuration...");
+            Plugin.PluginInterface.SavePluginConfig(this);
+            Plugin.Log.Information($"[Configuration.Save] Configuration saved successfully");
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error($"[Configuration.Save] Failed to save configuration: {ex.Message}");
+        }
     }
 }

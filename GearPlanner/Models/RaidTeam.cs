@@ -65,15 +65,19 @@ public class RaidTeam
         var sheetNames = new HashSet<string>();
         var sheetsToRemove = new List<GearSheet>();
         
+        Plugin.Log.Debug($"[CleanupDuplicateSheets] Checking team '{Name}' with {Sheets.Count} sheets");
+        
         foreach (var sheet in Sheets)
         {
             if (sheetNames.Contains(sheet.Name))
             {
                 // This is a duplicate
+                Plugin.Log.Warning($"[CleanupDuplicateSheets] Found duplicate sheet: '{sheet.Name}'");
                 sheetsToRemove.Add(sheet);
             }
             else
             {
+                Plugin.Log.Debug($"[CleanupDuplicateSheets] Sheet '{sheet.Name}' is unique");
                 sheetNames.Add(sheet.Name);
             }
         }
@@ -81,8 +85,11 @@ public class RaidTeam
         // Remove duplicates
         foreach (var sheet in sheetsToRemove)
         {
+            Plugin.Log.Warning($"[CleanupDuplicateSheets] Removing duplicate sheet: '{sheet.Name}'");
             Sheets.Remove(sheet);
         }
+        
+        Plugin.Log.Debug($"[CleanupDuplicateSheets] Team '{Name}' now has {Sheets.Count} sheets");
         
         // Ensure SelectedSheetIndex is valid
         if (SelectedSheetIndex < 0 || SelectedSheetIndex >= Sheets.Count)

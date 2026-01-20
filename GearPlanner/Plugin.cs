@@ -37,7 +37,10 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin()
     {
+        Plugin.Log.Information("[Plugin] Initializing GearPlanner plugin...");
+        
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        Plugin.Log.Information($"[Plugin] Configuration loaded. RaidTeams count: {Configuration.RaidTeams.Count}");
         
         // Clean up any duplicate sheets that may have been created on deserialization
         foreach (var team in Configuration.RaidTeams)
@@ -50,6 +53,7 @@ public sealed class Plugin : IDalamudPlugin
         
         // Initialize BiS library
         var configPath = PluginInterface.GetPluginConfigDirectory();
+        Plugin.Log.Information($"[Plugin] Config path: {configPath}");
         BiSLibrary = new BiSLibrary(configPath);
         BiSLibrary.LoadBiSSets();
         
@@ -58,6 +62,12 @@ public sealed class Plugin : IDalamudPlugin
 
         // Create sample team if this is first launch
         bool isFirstLaunch = Configuration.RaidTeams.Count == 0;
+        Plugin.Log.Information($"[Plugin] Is first launch: {isFirstLaunch}");
+        
+        if (isFirstLaunch)
+        {
+            CreateSampleTeam();
+        }
         if (isFirstLaunch)
         {
             CreateSampleTeam();
