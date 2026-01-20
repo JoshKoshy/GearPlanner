@@ -15,6 +15,9 @@ public class Configuration : IPluginConfiguration
     public int SelectedTeamIndex { get; set; } = -1;
     public List<GearSheet> IndividualTabSheets { get; set; } = new();
     public int IndividualTabSelectedSheetIndex { get; set; } = -1;
+    public List<string> LootPlannerWeeks { get; set; } = new();
+    public int LootPlannerSelectedWeekIndex { get; set; } = 0;
+    public Dictionary<string, int> LootPlannerAssignments { get; set; } = new();
 
     // The below exists just to make saving less cumbersome
     public void Save()

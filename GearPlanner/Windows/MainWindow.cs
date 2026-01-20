@@ -27,8 +27,9 @@ public class MainWindow : Window, IDisposable
     private int individualTabSelectedSheetIndex = 0;
     private Dictionary<int, string> individualSheetRenameInput = new(); // Store rename input per sheet
     private Dictionary<string, int> lootPlannerAssignments = new(); // Track loot assignments by loot name -> member index
-    private List<string> lootPlannerWeeks = new() { "Week 1" }; // List of weeks for loot planning
+    private List<string> lootPlannerWeeks = new(); // List of weeks for loot planning
     private int lootPlannerSelectedWeekIndex = 0; // Currently selected week
+    private bool lootPlannerDataLoaded = false; // Flag to track if loot planner data has been loaded from config
     private Dictionary<string, bool> whoNeedsItCheckboxes = new(); // Track checkbox states for Who Needs It tab
 
     public MainWindow(Plugin plugin)
@@ -47,6 +48,27 @@ public class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
+        // Initialize loot planner data from configuration on first draw
+        // Only load if our local list doesn't match the config (i.e., first time or plugin reloaded)
+        if (!lootPlannerDataLoaded)
+        {
+            var configWeeks = plugin.Configuration.LootPlannerWeeks ?? new List<string>();
+            lootPlannerWeeks.Clear();
+            lootPlannerWeeks.AddRange(configWeeks);
+            
+            // Ensure we have at least one week if the list is empty
+            if (lootPlannerWeeks.Count == 0)
+            {
+                lootPlannerWeeks.Add("Week 1");
+            }
+            
+            lootPlannerSelectedWeekIndex = plugin.Configuration.LootPlannerSelectedWeekIndex;
+            if (lootPlannerSelectedWeekIndex < 0 || lootPlannerSelectedWeekIndex >= lootPlannerWeeks.Count)
+                lootPlannerSelectedWeekIndex = 0;
+            lootPlannerAssignments = new Dictionary<string, int>(plugin.Configuration.LootPlannerAssignments ?? new Dictionary<string, int>());
+            lootPlannerDataLoaded = true;
+        }
+
         // Header
         ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Gear Planner");
         ImGui.SameLine();
@@ -103,15 +125,6 @@ public class MainWindow : Window, IDisposable
             individualTabSelectedSheetIndex = plugin.Configuration.IndividualTabSelectedSheetIndex;
             if (individualTabSelectedSheetIndex < 0 || individualTabSelectedSheetIndex >= individualTabSheets.Count)
                 individualTabSelectedSheetIndex = 0;
-            
-            // Apply defaults to all loaded sheets to ensure consistency
-            foreach (var sheet in individualTabSheets)
-            {
-                foreach (var sheetMember in sheet.Members)
-                {
-                    InitializeGearDefaults(sheetMember);
-                }
-            }
         }
         
         // Initialize sheets if still needed
@@ -128,8 +141,7 @@ public class MainWindow : Window, IDisposable
             plugin.Configuration.Save();
         }
 
-        var currentSheet = individualTabSheets[individualTabSelectedSheetIndex];
-        var member = currentSheet.Members.Count > 0 ? currentSheet.Members[0] : null;
+        var member = individualTabSheets[individualTabSelectedSheetIndex].Members.Count > 0 ? individualTabSheets[individualTabSelectedSheetIndex].Members[0] : null;
         
         if (member == null)
         {
@@ -159,9 +171,15 @@ public class MainWindow : Window, IDisposable
             ImGui.SetNextItemWidth(150);
             if (ImGui.Combo("##SheetSelector", ref individualTabSelectedSheetIndex, sheetNames))
             {
+                // Clear the rename input for the newly selected sheet so it gets refreshed
+                individualSheetRenameInput.Remove(individualTabSelectedSheetIndex);
+                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.IndividualTabSelectedSheetIndex = individualTabSelectedSheetIndex;
                 plugin.Configuration.Save();
             }
+            
+            // Recalculate currentSheet after combo in case it changed
+            var currentSheet = individualTabSheets[individualTabSelectedSheetIndex];
 
             // Add new sheet button
             ImGui.SameLine(0, 5);
@@ -193,6 +211,7 @@ public class MainWindow : Window, IDisposable
             if (ImGui.InputInt("##IndividualFloor1Clears", ref floor1Clears, 1, 5))
             {
                 currentSheet.Floor1Clears = floor1Clears;
+                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.Save();
             }
 
@@ -204,6 +223,7 @@ public class MainWindow : Window, IDisposable
             if (ImGui.InputInt("##IndividualFloor2Clears", ref floor2Clears, 1, 5))
             {
                 currentSheet.Floor2Clears = floor2Clears;
+                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.Save();
             }
 
@@ -215,6 +235,7 @@ public class MainWindow : Window, IDisposable
             if (ImGui.InputInt("##IndividualFloor3Clears", ref floor3Clears, 1, 5))
             {
                 currentSheet.Floor3Clears = floor3Clears;
+                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.Save();
             }
 
@@ -226,6 +247,7 @@ public class MainWindow : Window, IDisposable
             if (ImGui.InputInt("##IndividualFloor4Clears", ref floor4Clears, 1, 5))
             {
                 currentSheet.Floor4Clears = floor4Clears;
+                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.Save();
             }
 
@@ -251,6 +273,7 @@ public class MainWindow : Window, IDisposable
                 {
                     individualSheetRenameInput[individualTabSelectedSheetIndex] = sheetNameInput;
                     currentSheet.Name = sheetNameInput;
+                    plugin.Configuration.IndividualTabSheets = individualTabSheets;
                     plugin.Configuration.Save();
                 }
 
@@ -292,6 +315,7 @@ public class MainWindow : Window, IDisposable
                     {
                         member.Role = role;
                     }
+                    plugin.Configuration.IndividualTabSheets = individualTabSheets;
                     plugin.Configuration.Save();
                 }
 
@@ -307,6 +331,7 @@ public class MainWindow : Window, IDisposable
                 if (ImGui.Button("Sync Self", new Vector2((ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) / 2, 0)))
                 {
                     Helpers.EquipmentReader.SyncPlayerEquipmentToMember(member, Plugin.GameInventory);
+                    plugin.Configuration.IndividualTabSheets = individualTabSheets;
                     plugin.Configuration.Save();
                 }
                 ImGui.SameLine();
@@ -325,6 +350,7 @@ public class MainWindow : Window, IDisposable
                                 Plugin.Framework.RunOnTick(() =>
                                 {
                                     Helpers.EquipmentReader.SyncTargetEquipmentToMember(member, Plugin.GameInventory);
+                                    plugin.Configuration.IndividualTabSheets = individualTabSheets;
                                     plugin.Configuration.Save();
                                 }, TimeSpan.FromSeconds(2));
                             });
@@ -829,7 +855,18 @@ public class MainWindow : Window, IDisposable
             ImGui.SetNextItemWidth(-1);
             if (ImGui.InputText($"##CharName{memberIdx}", ref name, 50, ImGuiInputTextFlags.EnterReturnsTrue))
             {
+                // Update member name in current sheet
                 member.Name = name;
+                
+                // Sync name to same member index in all other sheets
+                for (int sheetIdx = 0; sheetIdx < team.Sheets.Count; sheetIdx++)
+                {
+                    if (sheetIdx != team.SelectedSheetIndex && memberIdx < team.Sheets[sheetIdx].Members.Count)
+                    {
+                        team.Sheets[sheetIdx].Members[memberIdx].Name = name;
+                    }
+                }
+                
                 plugin.Configuration.Save();
             }
             
@@ -1643,6 +1680,7 @@ public class MainWindow : Window, IDisposable
                         {
                             piece.DesiredSource = GearSource.None;
                             piece.DesiredItemId = 0;
+                            plugin.Configuration.IndividualTabSheets = individualTabSheets;
                             plugin.Configuration.Save();
                         }
                     }
@@ -1685,6 +1723,7 @@ public class MainWindow : Window, IDisposable
                         {
                             piece.Source = GearSource.None;
                             piece.CurrentItemId = 0;
+                            plugin.Configuration.IndividualTabSheets = individualTabSheets;
                             plugin.Configuration.Save();
                         }
                     }
@@ -1702,6 +1741,7 @@ public class MainWindow : Window, IDisposable
                             {
                                 piece.Source = System.Enum.Parse<GearSource>(sourceEnumValue);
                                 piece.CurrentItemId = FindItemIdForGearSlot(member.Job, slotName, piece.Source);
+                                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                                 plugin.Configuration.Save();
                             }
                         }
@@ -1722,6 +1762,7 @@ public class MainWindow : Window, IDisposable
                             {
                                 piece.DesiredSource = System.Enum.Parse<GearSource>(sourceEnumValue);
                                 piece.DesiredItemId = FindItemIdForGearSlot(member.Job, slotName, piece.DesiredSource);
+                                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                                 plugin.Configuration.Save();
                             }
                         }
@@ -2012,6 +2053,8 @@ public class MainWindow : Window, IDisposable
         {
             if (lootPlannerSelectedWeekIndex < 0)
                 lootPlannerSelectedWeekIndex = 0;
+            plugin.Configuration.LootPlannerSelectedWeekIndex = lootPlannerSelectedWeekIndex;
+            plugin.Configuration.Save();
         }
 
         // Add new week button
@@ -2021,6 +2064,9 @@ public class MainWindow : Window, IDisposable
             string newWeekName = $"Week {lootPlannerWeeks.Count + 1}";
             lootPlannerWeeks.Add(newWeekName);
             lootPlannerSelectedWeekIndex = lootPlannerWeeks.Count - 1;
+            plugin.Configuration.LootPlannerWeeks = lootPlannerWeeks;
+            plugin.Configuration.LootPlannerSelectedWeekIndex = lootPlannerSelectedWeekIndex;
+            plugin.Configuration.Save();
         }
 
         // Delete week button (greyed out if only one week)
@@ -2035,6 +2081,9 @@ public class MainWindow : Window, IDisposable
             lootPlannerWeeks.RemoveAt(lootPlannerSelectedWeekIndex);
             if (lootPlannerSelectedWeekIndex >= lootPlannerWeeks.Count)
                 lootPlannerSelectedWeekIndex = lootPlannerWeeks.Count - 1;
+            plugin.Configuration.LootPlannerWeeks = lootPlannerWeeks;
+            plugin.Configuration.LootPlannerSelectedWeekIndex = lootPlannerSelectedWeekIndex;
+            plugin.Configuration.Save();
         }
         
         if (lootPlannerWeeks.Count <= 1)
@@ -2225,6 +2274,8 @@ public class MainWindow : Window, IDisposable
                         if (ImGui.Combo($"##LootAssign{lootKey}", ref selectedMember, memberNames))
                         {
                             lootPlannerAssignments[lootKey] = selectedMember;
+                            plugin.Configuration.LootPlannerAssignments = lootPlannerAssignments;
+                            plugin.Configuration.Save();
                         }
                     }
                 }
