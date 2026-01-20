@@ -1152,7 +1152,7 @@ public class MainWindow : Window, IDisposable
             {
                 ImGui.TableSetColumnIndex(floor);
                 int pagesFromClears = GetBooksFromClears(team, floor);
-                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int pageAdjustment = team.BookAdjustments.ContainsKey(floor) ? team.BookAdjustments[floor] : 0;
                 int totalBooks = pagesFromClears + pageAdjustment;
                 ImGui.Text(totalBooks.ToString());
             }
@@ -1166,7 +1166,7 @@ public class MainWindow : Window, IDisposable
                 ImGui.TableSetColumnIndex(floor);
                 int pagesNeeded = CalculateBooksNeededForFloor(member, floor);
                 int pagesFromClears = GetBooksFromClears(team, floor);
-                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int pageAdjustment = team.BookAdjustments.ContainsKey(floor) ? team.BookAdjustments[floor] : 0;
                 int totalBooks = pagesFromClears + pageAdjustment;
                 int remainingBooks = Math.Max(0, pagesNeeded - totalBooks);
                 ImGui.Text(remainingBooks.ToString());
@@ -1180,10 +1180,10 @@ public class MainWindow : Window, IDisposable
             {
                 ImGui.TableSetColumnIndex(floor);
                 ImGui.SetNextItemWidth(35);
-                int adjustValue = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int adjustValue = team.BookAdjustments.ContainsKey(floor) ? team.BookAdjustments[floor] : 0;
                 if (ImGui.InputInt($"##BookAdjust{memberIdx}_{floor}", ref adjustValue))
                 {
-                    member.BookAdjustments[floor] = adjustValue;
+                    team.BookAdjustments[floor] = adjustValue;
                     plugin.Configuration.Save();
                 }
             }
@@ -2458,7 +2458,7 @@ public class MainWindow : Window, IDisposable
                     // Main sheet pages needed
                     int pagesNeeded = CalculateBooksNeededForFloor(member, floor);
                     int pagesFromClears = GetBooksFromClears(team, floor);
-                    int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                    int pageAdjustment = team.BookAdjustments.ContainsKey(floor) ? team.BookAdjustments[floor] : 0;
                     int totalBooks = pagesFromClears + pageAdjustment;
                     int remainingBooks = Math.Max(0, pagesNeeded - totalBooks);
                     

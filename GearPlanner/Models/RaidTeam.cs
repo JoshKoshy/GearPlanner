@@ -14,11 +14,12 @@ public class RaidTeam
     public DateTime CreatedDate { get; set; } = DateTime.Now;
     public int TierNumber { get; set; } = 0; // Arcadion tier 1-4
     
-    // Floor clears are team-wide, not per-sheet
+    // Team-wide properties (constant across all sheets)
     public int Floor1Clears { get; set; } = 0;
     public int Floor2Clears { get; set; } = 0;
     public int Floor3Clears { get; set; } = 0;
     public int Floor4Clears { get; set; } = 0;
+    public Dictionary<int, int> BookAdjustments { get; set; } = new() { { 1, 0 }, { 2, 0 }, { 3, 0 }, { 4, 0 } };
     
     // Convenience properties for backward compatibility and default sheet access
     // JsonIgnore prevents this proxy property from being serialized, avoiding duplication
