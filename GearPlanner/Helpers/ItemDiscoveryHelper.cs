@@ -260,20 +260,20 @@ public static class ItemDiscoveryHelper
     /// </summary>
     private static GearSource DetermineCategoryFromName(string itemName)
     {
-        if (itemName.Contains("Grand Champion's", StringComparison.OrdinalIgnoreCase))
-            return GearSource.Savage;
+        // Check patterns in priority order to ensure more specific patterns match first
+        // (e.g., "Augmented Bygone Brass" must be checked before "Bygone Brass")
+        var configuredPatterns = GearNamePatterns.GetConfiguredPatterns();
         
-        if (itemName.Contains("Augmented Bygone Brass", StringComparison.OrdinalIgnoreCase))
-            return GearSource.TomeUp;
-
-        if (itemName.Contains("Bygone Brass", StringComparison.OrdinalIgnoreCase))
-            return GearSource.Tome;
-
-        if (itemName.Contains("Courtly Lover's", StringComparison.OrdinalIgnoreCase))
-            return GearSource.Crafted;
-
-        if (itemName.Contains("Runaway", StringComparison.OrdinalIgnoreCase))
-            return GearSource.Prep;
+        foreach (var (category, patterns) in configuredPatterns)
+        {
+            foreach (var pattern in patterns)
+            {
+                if (itemName.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                {
+                    return category;
+                }
+            }
+        }
 
         // Default to Savage if uncertain
         return GearSource.Savage;

@@ -28,51 +28,25 @@ public static class ItemDatabase
 
         try
         {
-            // Discover all Grand Champion's items (Savage)
-            var savageItems = ItemDiscoveryHelper.DiscoverItems(
-                dataManager,
-                "Grand Champion's",
-                new Dictionary<uint, string[]>()
-            );
-
-            // Discover all Augmented Bygone Brass items (Tome Up)
-            var tomeUpItems = ItemDiscoveryHelper.DiscoverItems(
-                dataManager,
-                "Augmented Bygone Brass",
-                new Dictionary<uint, string[]>()
-            );
-
-            // Discover all Courtly Lover's items (Crafted)
-            var craftedItems = ItemDiscoveryHelper.DiscoverItems(
-                dataManager,
-                "Courtly Lover's",
-                new Dictionary<uint, string[]>()
-            );
-
-            // Discover all Bygone Brass items (Tome)
-            var tomeItems = ItemDiscoveryHelper.DiscoverItems(
-                dataManager,
-                "Bygone Brass",
-                new Dictionary<uint, string[]>()
-            );
-
-            // Discover all Runaway items (Prep)
-            var prepItems = ItemDiscoveryHelper.DiscoverItems(
-                dataManager,
-                "Runaway",
-                new Dictionary<uint, string[]>()
-            );
-
-            // Combine and cache
+            // Combine and cache items from all configured gear patterns
             _cachedItems = new List<Item>();
-            _cachedItems.AddRange(savageItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
-            _cachedItems.AddRange(tomeUpItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
-            _cachedItems.AddRange(craftedItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
-            _cachedItems.AddRange(tomeItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
-            _cachedItems.AddRange(prepItems.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
+            var configuredPatterns = GearNamePatterns.GetConfiguredPatterns();
+
+            foreach (var (category, patterns) in configuredPatterns)
+            {
+                foreach (var pattern in patterns)
+                {
+                    var items = ItemDiscoveryHelper.DiscoverItems(
+                        dataManager,
+                        pattern,
+                        new Dictionary<uint, string[]>()
+                    );
+                    _cachedItems.AddRange(items.Select(x => new Item(x.Id, x.Name, x.Category, x.Jobs, x.Slot)));
+                }
+            }
 
             _initialized = true;
-            Plugin.Log.Information($"ItemDatabase initialized with {_cachedItems.Count} items");
+            Plugin.Log.Information($"ItemDatabase initialized with {_cachedItems.Count} items from {configuredPatterns.Count} categories");
         }
         catch (Exception ex)
         {
