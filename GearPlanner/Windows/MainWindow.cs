@@ -32,6 +32,10 @@ public class MainWindow : Window, IDisposable
     private bool lootPlannerDataLoaded = false; // Flag to track if loot planner data has been loaded from config
     private Dictionary<string, bool> whoNeedsItCheckboxes = new(); // Track checkbox states for Who Needs It tab
     private string customXivGearJsonString = ""; // Store custom xivgear JSON string
+    private int individualTabFloor1Clears = 0; // Static floor clears across all individual sheets
+    private int individualTabFloor2Clears = 0;
+    private int individualTabFloor3Clears = 0;
+    private int individualTabFloor4Clears = 0;
 
     public MainWindow(Plugin plugin)
         : base("Gear Planner##MainWindow")
@@ -208,11 +212,8 @@ public class MainWindow : Window, IDisposable
             ImGui.Text("Floor 1:");
             ImGui.SameLine(80);
             ImGui.SetNextItemWidth(80);
-            int floor1Clears = currentSheet.Floor1Clears;
-            if (ImGui.InputInt("##IndividualFloor1Clears", ref floor1Clears, 1, 5))
+            if (ImGui.InputInt("##IndividualFloor1Clears", ref individualTabFloor1Clears, 1, 5))
             {
-                currentSheet.Floor1Clears = floor1Clears;
-                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.Save();
             }
 
@@ -220,11 +221,8 @@ public class MainWindow : Window, IDisposable
             ImGui.Text("Floor 2:");
             ImGui.SameLine(280);
             ImGui.SetNextItemWidth(80);
-            int floor2Clears = currentSheet.Floor2Clears;
-            if (ImGui.InputInt("##IndividualFloor2Clears", ref floor2Clears, 1, 5))
+            if (ImGui.InputInt("##IndividualFloor2Clears", ref individualTabFloor2Clears, 1, 5))
             {
-                currentSheet.Floor2Clears = floor2Clears;
-                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.Save();
             }
 
@@ -232,11 +230,8 @@ public class MainWindow : Window, IDisposable
             ImGui.Text("Floor 3:");
             ImGui.SameLine(80);
             ImGui.SetNextItemWidth(80);
-            int floor3Clears = currentSheet.Floor3Clears;
-            if (ImGui.InputInt("##IndividualFloor3Clears", ref floor3Clears, 1, 5))
+            if (ImGui.InputInt("##IndividualFloor3Clears", ref individualTabFloor3Clears, 1, 5))
             {
-                currentSheet.Floor3Clears = floor3Clears;
-                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.Save();
             }
 
@@ -244,11 +239,8 @@ public class MainWindow : Window, IDisposable
             ImGui.Text("Floor 4:");
             ImGui.SameLine(280);
             ImGui.SetNextItemWidth(80);
-            int floor4Clears = currentSheet.Floor4Clears;
-            if (ImGui.InputInt("##IndividualFloor4Clears", ref floor4Clears, 1, 5))
+            if (ImGui.InputInt("##IndividualFloor4Clears", ref individualTabFloor4Clears, 1, 5))
             {
-                currentSheet.Floor4Clears = floor4Clears;
-                plugin.Configuration.IndividualTabSheets = individualTabSheets;
                 plugin.Configuration.Save();
             }
 
