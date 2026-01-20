@@ -13,6 +13,7 @@
     "DownloadLinkTesting": "https://github.com/JoshKoshy/GearPlanner/raw/refs/heads/master/GearPlanner/plugins/latest.zip",
     "DownloadLinkUpdate": "https://github.com/JoshKoshy/GearPlanner/raw/refs/heads/master/GearPlanner/plugins/latest.zip",
     "ApplicableVersion": "any",
-    "Tags": ["raid", "gear", "planning"]
+    "Tags": ["raid", "gear", "planning"],
+    "IconUrl": "https://raw.githubusercontent.com/JoshKoshy/GearPlanner/master/assets/icon.png"
   }
 ]
