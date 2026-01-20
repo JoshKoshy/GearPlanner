@@ -31,6 +31,7 @@ public class MainWindow : Window, IDisposable
     private int lootPlannerSelectedWeekIndex = 0; // Currently selected week
     private bool lootPlannerDataLoaded = false; // Flag to track if loot planner data has been loaded from config
     private Dictionary<string, bool> whoNeedsItCheckboxes = new(); // Track checkbox states for Who Needs It tab
+    private string customXivGearJsonString = ""; // Store custom xivgear JSON string
 
     public MainWindow(Plugin plugin)
         : base("Gear Planner##MainWindow")
@@ -365,47 +366,115 @@ public class MainWindow : Window, IDisposable
                 // Import dialog for xivgear.app
                 if (ImGui.BeginPopupModal("XivGearImportPopupIndividual", ImGuiWindowFlags.AlwaysAutoResize))
                 {
-                    ImGui.TextWrapped("Select a BiS set for this job:");
+                    // Initialize tab state
+                    if (!memberBiSSetIndex.ContainsKey(-2))
+                        memberBiSSetIndex[-2] = 0; // 0 = Preset, 1 = Custom JSON
+                    
+                    int importTabIndex = memberBiSSetIndex[-2];
+                    
+                    // Tab buttons
+                    if (ImGui.Button("Preset Sets", new Vector2(150, 0)))
+                        importTabIndex = 0;
+                    ImGui.SameLine();
+                    if (ImGui.Button("Custom JSON", new Vector2(150, 0)))
+                        importTabIndex = 1;
+                    
+                    memberBiSSetIndex[-2] = importTabIndex;
                     ImGui.Separator();
 
-                    // Convert job name to abbreviation for lookup
-                    var jobAbbr = Helpers.FFXIVJobs.GetJobAbbreviation(member.Job);
-                    var bisSets = plugin.BiSLibrary.GetBiSSetsForJob(jobAbbr);
-                    
-                    if (bisSets.Count > 0)
+                    if (importTabIndex == 0)
                     {
-                        if (!memberBiSSetIndex.ContainsKey(-1))
-                            memberBiSSetIndex[-1] = 0;
+                        // Tab 1: Preset BiS sets
+                        ImGui.TextWrapped("Select a BiS set for this job:");
+                        ImGui.Separator();
 
-                        var setNames = bisSets.Select(s => s.Name).ToArray();
-                        int selectedIndex = memberBiSSetIndex[-1];
+                        // Convert job name to abbreviation for lookup
+                        var jobAbbr = Helpers.FFXIVJobs.GetJobAbbreviation(member.Job);
+                        var bisSets = plugin.BiSLibrary.GetBiSSetsForJob(jobAbbr);
                         
-                        ImGui.SetNextItemWidth(300);
-                        if (ImGui.Combo("##BiSSetSelectIndividual", ref selectedIndex, setNames))
+                        if (bisSets.Count > 0)
                         {
-                            memberBiSSetIndex[-1] = selectedIndex;
-                        }
+                            if (!memberBiSSetIndex.ContainsKey(-1))
+                                memberBiSSetIndex[-1] = 0;
 
-                        ImGui.Spacing();
-
-                        if (ImGui.Button("Import", new Vector2(100, 0)))
-                        {
-                            if (selectedIndex >= 0 && selectedIndex < bisSets.Count)
+                            var setNames = bisSets.Select(s => s.Name).ToArray();
+                            int selectedIndex = memberBiSSetIndex[-1];
+                            
+                            ImGui.SetNextItemWidth(300);
+                            if (ImGui.Combo("##BiSSetSelectIndividual", ref selectedIndex, setNames))
                             {
-                                ImportBiSSet(member, bisSets[selectedIndex]);
-                                ImGui.CloseCurrentPopup();
+                                memberBiSSetIndex[-1] = selectedIndex;
+                            }
+
+                            ImGui.Spacing();
+
+                            if (ImGui.Button("Import##PresetImport", new Vector2(100, 0)))
+                            {
+                                if (selectedIndex >= 0 && selectedIndex < bisSets.Count)
+                                {
+                                    ImportBiSSet(member, bisSets[selectedIndex]);
+                                    ImGui.CloseCurrentPopup();
+                                }
                             }
                         }
+                        else
+                        {
+                            ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"No BiS sets available for {member.Job}");
+                        }
                     }
-                    else
+                    else if (importTabIndex == 1)
                     {
-                        ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"No BiS sets available for {member.Job}");
-                    }
+                        // Tab 2: Custom JSON import - simplified text field
+                        ImGui.SetNextItemWidth(-1);
+                        ImGui.InputTextMultiline("##CustomJsonInput", ref customXivGearJsonString, 10000, new Vector2(-1, 150), ImGuiInputTextFlags.AllowTabInput);
 
-                    ImGui.SameLine();
-                    if (ImGui.Button("Cancel", new Vector2(100, 0)))
-                    {
-                        ImGui.CloseCurrentPopup();
+                        ImGui.Spacing();
+                        ImGui.Spacing();
+
+                        // Load and Cancel buttons
+                        if (ImGui.Button("Load JSON", new Vector2(100, 0)))
+                        {
+                            if (!string.IsNullOrWhiteSpace(customXivGearJsonString))
+                            {
+                                var importedSet = Helpers.XivGearImporter.ImportFromJson(customXivGearJsonString, "Custom Import");
+                                if (importedSet != null && importedSet.Items.Count > 0)
+                                {
+                                    ImportBiSSet(member, importedSet);
+                                    customXivGearJsonString = "";
+                                    ImGui.CloseCurrentPopup();
+                                }
+                                else
+                                {
+                                    Plugin.ChatGui.Print("Failed to parse JSON. Check plugin logs for details.");
+                                }
+                            }
+                            else
+                            {
+                                Plugin.ChatGui.Print("Please paste JSON into the text field.");
+                            }
+                        }
+
+                        ImGui.SameLine();
+                        if (ImGui.Button("Cancel", new Vector2(100, 0)))
+                        {
+                            customXivGearJsonString = "";
+                            ImGui.CloseCurrentPopup();
+                        }
+
+                        ImGui.SameLine();
+                        // Info icon with instructions
+                        ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1.0f), "(?)");
+                        if (ImGui.IsItemHovered())
+                        {
+                            ImGui.BeginTooltip();
+                            ImGui.TextUnformatted("On your xivgear.app sheet:");
+                            ImGui.TextUnformatted("• Click Export...");
+                            ImGui.TextUnformatted("• Click Selected Sheet");
+                            ImGui.TextUnformatted("• Click 'JSON for This Sheet'");
+                            ImGui.TextUnformatted("• Copy and paste into the field above");
+                            ImGui.TextUnformatted("• Click Load JSON");
+                            ImGui.EndTooltip();
+                        }
                     }
 
                     ImGui.EndPopup();
