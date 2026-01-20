@@ -131,6 +131,15 @@ public class MainWindow : Window, IDisposable
             if (individualTabSelectedSheetIndex < 0 || individualTabSelectedSheetIndex >= individualTabSheets.Count)
                 individualTabSelectedSheetIndex = 0;
         }
+
+        // Load floor clears from configuration
+        if (individualTabFloor1Clears == 0 && individualTabFloor2Clears == 0 && individualTabFloor3Clears == 0 && individualTabFloor4Clears == 0)
+        {
+            individualTabFloor1Clears = plugin.Configuration.IndividualTabFloor1Clears;
+            individualTabFloor2Clears = plugin.Configuration.IndividualTabFloor2Clears;
+            individualTabFloor3Clears = plugin.Configuration.IndividualTabFloor3Clears;
+            individualTabFloor4Clears = plugin.Configuration.IndividualTabFloor4Clears;
+        }
         
         // Initialize sheets if still needed
         if (individualTabSheets.Count == 0)
@@ -214,6 +223,7 @@ public class MainWindow : Window, IDisposable
             ImGui.SetNextItemWidth(80);
             if (ImGui.InputInt("##IndividualFloor1Clears", ref individualTabFloor1Clears, 1, 5))
             {
+                plugin.Configuration.IndividualTabFloor1Clears = individualTabFloor1Clears;
                 plugin.Configuration.Save();
             }
 
@@ -223,6 +233,7 @@ public class MainWindow : Window, IDisposable
             ImGui.SetNextItemWidth(80);
             if (ImGui.InputInt("##IndividualFloor2Clears", ref individualTabFloor2Clears, 1, 5))
             {
+                plugin.Configuration.IndividualTabFloor2Clears = individualTabFloor2Clears;
                 plugin.Configuration.Save();
             }
 
@@ -232,6 +243,7 @@ public class MainWindow : Window, IDisposable
             ImGui.SetNextItemWidth(80);
             if (ImGui.InputInt("##IndividualFloor3Clears", ref individualTabFloor3Clears, 1, 5))
             {
+                plugin.Configuration.IndividualTabFloor3Clears = individualTabFloor3Clears;
                 plugin.Configuration.Save();
             }
 
@@ -241,6 +253,7 @@ public class MainWindow : Window, IDisposable
             ImGui.SetNextItemWidth(80);
             if (ImGui.InputInt("##IndividualFloor4Clears", ref individualTabFloor4Clears, 1, 5))
             {
+                plugin.Configuration.IndividualTabFloor4Clears = individualTabFloor4Clears;
                 plugin.Configuration.Save();
             }
 

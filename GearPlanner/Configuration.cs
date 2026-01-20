@@ -15,6 +15,10 @@ public class Configuration : IPluginConfiguration
     public int SelectedTeamIndex { get; set; } = -1;
     public List<GearSheet> IndividualTabSheets { get; set; } = new();
     public int IndividualTabSelectedSheetIndex { get; set; } = -1;
+    public int IndividualTabFloor1Clears { get; set; } = 0;
+    public int IndividualTabFloor2Clears { get; set; } = 0;
+    public int IndividualTabFloor3Clears { get; set; } = 0;
+    public int IndividualTabFloor4Clears { get; set; } = 0;
     public List<string> LootPlannerWeeks { get; set; } = new();
     public int LootPlannerSelectedWeekIndex { get; set; } = 0;
     public Dictionary<string, int> LootPlannerAssignments { get; set; } = new();
