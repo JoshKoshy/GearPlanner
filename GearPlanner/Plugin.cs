@@ -26,6 +26,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ISeStringEvaluator SeStringEvaluator { get; private set; } = null!;
 
     private const string CommandName = "/gp";
+    private const string CommandNameLong = "/gearplanner";
 
     public Configuration Configuration { get; init; }
     public BiSLibrary BiSLibrary { get; init; }
@@ -101,6 +102,11 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "Usage: /gp [config|show|hide]. Manage raid gear planning."
         });
 
+        CommandManager.AddHandler(CommandNameLong, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Usage: /gearplanner [config|show|hide]. Manage raid gear planning."
+        });
+
         // Tell the UI system that we want our windows to be drawn through the window system
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
 
@@ -120,11 +126,11 @@ public sealed class Plugin : IDalamudPlugin
         
         WindowSystem.RemoveAllWindows();
 
-
         MainWindow.Dispose();
         SetupWindow.Dispose();
 
         CommandManager.RemoveHandler(CommandName);
+        CommandManager.RemoveHandler(CommandNameLong);
     }
 
     private void OnCommand(string command, string args)

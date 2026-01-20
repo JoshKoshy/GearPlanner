@@ -11,10 +11,8 @@ A Dalamud plugin for Final Fantasy XIV that helps raid teams plan and track gear
 ## Installation
 
 1. Open Dalamud Settings (`/xlsettings`)
-2. Go to **Experimental** → **Dev Plugin Locations**
-3. Add the full path to the built `GearPlanner.dll`
-4. Open Plugin Installer (`/xlplugins`)
-5. Go to **Dev Tools** → **Installed Dev Plugins**
+2. Go to **Experimental** → **Custom Plugin Repositories**
+3. Add "https://raw.githubusercontent.com/JoshKoshy/GearPlanner/refs/heads/master/GearPlanner/pluginmaster.json"
 6. Enable **Gear Planner**
 7. Use `/gp` or `/gearplanner` to open the main window
 
@@ -30,6 +28,11 @@ A Dalamud plugin for Final Fantasy XIV that helps raid teams plan and track gear
 - Currency and material tracking
 - Detailed priority loot table
 - Assign weekly loot plans to team members
+
+## Screenshot
+
+![Gear Planner Team View](assets/teamview.png)
+![Gear Planner Loot Overview](assets/whoneedsit.png)
 
 ## Usage Tips
 
