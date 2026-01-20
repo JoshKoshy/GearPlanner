@@ -35,25 +35,20 @@ public class RaidTeam
     
     public RaidTeam() 
     {
-        // Initialize with default Main sheet
-        if (Sheets.Count == 0)
-        {
-            Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
-            SelectedSheetIndex = 0;
-        }
-        CleanupDuplicateSheets();
+        // Don't add a default sheet here - this is called during JSON deserialization
+        // and would duplicate sheets that already exist in the JSON
+        // Cleanup will be called after deserialization in Plugin.cs
     }
     
     public RaidTeam(string name)
     {
         Name = name;
-        // Initialize with default Main sheet
+        // Only add default Main sheet for newly created teams (not during deserialization)
         if (Sheets.Count == 0)
         {
             Sheets.Add(new GearSheet("Main", new List<RaidMember>()));
             SelectedSheetIndex = 0;
         }
-        CleanupDuplicateSheets();
     }
     
     /// <summary>
