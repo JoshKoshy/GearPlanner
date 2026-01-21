@@ -5,5 +5,6 @@
   "Punchline": "Raid team gear distribution and BiS planning tool.",
   "Description": "Helps FFXIV raid teams plan gear distribution, track BiS gear, and manage alt gear.",
   "ApplicableVersion": "any",
-  "Tags": ["raid", "gear", "planning"]
+  "Tags": ["raid", "gear", "planning"],
+  "IconUrl": "https://raw.githubusercontent.com/xivdev/Penumbra/master/images/icon.png"
 }

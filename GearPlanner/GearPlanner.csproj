@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Data/BiSData.json" />
+    <EmbeddedResource Include="../assets/icon.png" />
   </ItemGroup>
 
   <ItemGroup>
