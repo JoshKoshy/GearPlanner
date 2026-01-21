@@ -2579,9 +2579,17 @@ public class MainWindow : Window, IDisposable
             {
                 ImGui.TableNextRow();
 
-                // Gear slot name column
+                // Gear slot name column with color coding
                 ImGui.TableSetColumnIndex(0);
-                ImGui.Text(FormatSlotName(slotName));
+                Vector4 slotColor = slotName switch
+                {
+                    "MainHand" => new Vector4(0.5f, 0.8f, 1.0f, 1.0f),      // Light Blue for Main Hand
+                    "Head" or "Hands" or "Feet" => new Vector4(1.0f, 1.0f, 0.0f, 1.0f),  // Yellow
+                    "Body" or "Legs" => new Vector4(0.0f, 1.0f, 0.0f, 1.0f), // Green
+                    "Ears" or "Neck" or "Wrists" or "Ring1" or "Ring2" => new Vector4(1.0f, 0.3f, 0.3f, 1.0f), // Light Red
+                    _ => new Vector4(1.0f, 1.0f, 1.0f, 1.0f)  // White default
+                };
+                ImGui.TextColored(slotColor, FormatSlotName(slotName));
 
                 // Build tooltip of who needs this gear
                 var membersNeedingGear = new List<(string name, bool isMain)>();
@@ -2693,6 +2701,10 @@ public class MainWindow : Window, IDisposable
                                 whoNeedsItCheckboxes[checkboxKey] = false;
                             }
 
+                            // Get cell position for hover detection
+                            var cellMin = ImGui.GetCursorScreenPos();
+                            var cellMax = cellMin + new Vector2(100, ImGui.GetFrameHeight());
+
                             bool isChecked = whoNeedsItCheckboxes[checkboxKey];
                             if (isChecked)
                             {
@@ -2704,11 +2716,27 @@ public class MainWindow : Window, IDisposable
                                 if (needsForMain)
                                 {
                                     ImGui.TextColored(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), "NEED");
+                                    if (ImGui.IsMouseHoveringRect(cellMin, cellMax))
+                                    {
+                                        ImGui.BeginTooltip();
+                                        string jobName = mainSheetMember?.Job ?? "Unknown Job";
+                                        ImGui.TextUnformatted($"Needed for: {jobName}");
+                                        ImGui.EndTooltip();
+                                    }
                                 }
                                 else if (altSheetWithNeed >= 0)
                                 {
                                     // Pink color for alt sheet needs
                                     ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"NEED (Alt Job {altSheetWithNeed})");
+                                    if (ImGui.IsMouseHoveringRect(cellMin, cellMax))
+                                    {
+                                        ImGui.BeginTooltip();
+                                        var altSheet = team.Sheets[altSheetWithNeed];
+                                        var altMemberInSheet = memberIdx < altSheet.Members.Count ? altSheet.Members[memberIdx] : null;
+                                        string altJobName = altMemberInSheet?.Job ?? "Unknown Job";
+                                        ImGui.TextUnformatted($"Needed for: {altJobName}");
+                                        ImGui.EndTooltip();
+                                    }
                                 }
                             }
                         }
@@ -2716,15 +2744,41 @@ public class MainWindow : Window, IDisposable
                 }
             }
 
-            // Add summary rows below gear slots
-            ImGui.Spacing();
+            ImGui.EndTable();
+        }
 
+        ImGui.Spacing();
+        ImGui.Spacing();
+
+        // Create separate table for Books and Materials summary
+        if (ImGui.BeginTable("WhoNeedsItSummary", columnCount, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+        {
+            // Setup columns to match the first table
+            ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 120);
+            foreach (var member in team.Members)
+            {
+                ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 100);
+            }
+            
+            // No header row for summary table
+            
             // Books Needed by floor rows
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableNextRow();
                 ImGui.TableSetColumnIndex(0);
-                ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), $"Floor {floor} Books");
+                
+                // Color-code the floor books text
+                Vector4 floorColor = floor switch
+                {
+                    1 => new Vector4(1.0f, 0.3f, 0.3f, 1.0f),      // Light Red for Floor 1
+                    2 => new Vector4(1.0f, 1.0f, 0.0f, 1.0f),      // Yellow for Floor 2
+                    3 => new Vector4(0.0f, 1.0f, 0.0f, 1.0f),      // Green for Floor 3
+                    4 => new Vector4(0.5f, 0.8f, 1.0f, 1.0f),      // Light Blue for Floor 4
+                    _ => new Vector4(0.0f, 1.0f, 1.0f, 1.0f)       // Cyan default
+                };
+                
+                ImGui.TextColored(floorColor, $"Floor {floor} Books");
 
                 // Always use main sheet members for pages
                 var mainSheetMembers = team.Sheets.Count > 0 ? team.Sheets[0].Members : new List<Models.RaidMember>();
@@ -2759,16 +2813,22 @@ public class MainWindow : Window, IDisposable
                     
                     int totalAltBooks = altBooksBreakdown.Sum();
                     
+                    // Get cell position for hover detection
+                    ImGui.TableSetColumnIndex(memberIdx + 1);
+                    var cellMin = ImGui.GetCursorScreenPos();
+                    var cellMax = cellMin + new Vector2(100, ImGui.GetFrameHeight());
+                    
                     // Display main pages, then alt pages in pink if there are any
                     ImGui.Text(remainingBooks.ToString());
+                    
                     if (totalAltBooks > 0)
                     {
                         ImGui.SameLine(0, 5);
                         ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"+{totalAltBooks}");
                     }
                     
-                    // Tooltip showing breakdown
-                    if (ImGui.IsItemHovered())
+                    // Show tooltip if cell is hovered
+                    if (ImGui.IsMouseHoveringRect(cellMin, cellMax))
                     {
                         ImGui.BeginTooltip();
                         ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"Books needed for {member.Name}:");
@@ -2788,32 +2848,122 @@ public class MainWindow : Window, IDisposable
             // Glazes Needed row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Glazes Needed");
+            ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), "Glazes Needed");
 
             for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
             {
                 ImGui.TableSetColumnIndex(memberIdx + 1);
                 var member = team.Members[memberIdx];
                 int glazesNeeded = CalculateGlazesNeeded(member);
+                
+                // Check alt sheets for glazes needed
+                var altGlazesBreakdown = new List<int>();
+                if (team.Sheets.Count > 1)
+                {
+                    for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                    {
+                        var sheet = team.Sheets[sheetIdx];
+                        if (memberIdx < sheet.Members.Count)
+                        {
+                            var altMember = sheet.Members[memberIdx];
+                            int altGlazesForSheet = CalculateGlazesNeeded(altMember);
+                            altGlazesBreakdown.Add(altGlazesForSheet);
+                        }
+                    }
+                }
+                
+                int totalAltGlazes = altGlazesBreakdown.Sum();
+                
+                // Get cell position for hover detection
+                var cellMin = ImGui.GetCursorScreenPos();
+                var cellMax = cellMin + new Vector2(100, ImGui.GetFrameHeight());
+                
+                // Display main glazes, then alt glazes in pink if there are any
                 ImGui.Text(glazesNeeded.ToString());
+                
+                if (totalAltGlazes > 0)
+                {
+                    ImGui.SameLine(0, 5);
+                    ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"+{totalAltGlazes}");
+                }
+                
+                // Show tooltip if cell is hovered
+                if (ImGui.IsMouseHoveringRect(cellMin, cellMax))
+                {
+                    ImGui.BeginTooltip();
+                    ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"Glazes needed for {member.Name}:");
+                    ImGui.TextColored(new Vector4(1.0f, 1.0f, 0.0f, 1.0f), $"  Main: {glazesNeeded}");
+                    
+                    for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                    {
+                        int altGlazesForThisSheet = sheetIdx - 1 < altGlazesBreakdown.Count ? altGlazesBreakdown[sheetIdx - 1] : 0;
+                        ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"  Alt Job {sheetIdx}: {altGlazesForThisSheet}");
+                    }
+                    
+                    ImGui.EndTooltip();
+                }
             }
 
             // Twines Needed row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
-            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Twines Needed");
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), "Twines Needed");
 
             for (int memberIdx = 0; memberIdx < team.Members.Count; memberIdx++)
             {
                 ImGui.TableSetColumnIndex(memberIdx + 1);
                 var member = team.Members[memberIdx];
                 int twinesNeeded = CalculateTwinesNeeded(member);
+                
+                // Check alt sheets for twines needed
+                var altTwinesBreakdown = new List<int>();
+                if (team.Sheets.Count > 1)
+                {
+                    for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                    {
+                        var sheet = team.Sheets[sheetIdx];
+                        if (memberIdx < sheet.Members.Count)
+                        {
+                            var altMember = sheet.Members[memberIdx];
+                            int altTwinesForSheet = CalculateTwinesNeeded(altMember);
+                            altTwinesBreakdown.Add(altTwinesForSheet);
+                        }
+                    }
+                }
+                
+                int totalAltTwines = altTwinesBreakdown.Sum();
+                
+                // Get cell position for hover detection
+                var cellMin = ImGui.GetCursorScreenPos();
+                var cellMax = cellMin + new Vector2(100, ImGui.GetFrameHeight());
+                
+                // Display main twines, then alt twines in pink if there are any
                 ImGui.Text(twinesNeeded.ToString());
+                
+                if (totalAltTwines > 0)
+                {
+                    ImGui.SameLine(0, 5);
+                    ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"+{totalAltTwines}");
+                }
+                
+                // Show tooltip if cell is hovered
+                if (ImGui.IsMouseHoveringRect(cellMin, cellMax))
+                {
+                    ImGui.BeginTooltip();
+                    ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), $"Twines needed for {member.Name}:");
+                    ImGui.TextColored(new Vector4(0.0f, 1.0f, 0.0f, 1.0f), $"  Main: {twinesNeeded}");
+                    
+                    for (int sheetIdx = 1; sheetIdx < team.Sheets.Count; sheetIdx++)
+                    {
+                        int altTwinesForThisSheet = sheetIdx - 1 < altTwinesBreakdown.Count ? altTwinesBreakdown[sheetIdx - 1] : 0;
+                        ImGui.TextColored(new Vector4(1.0f, 0.5f, 1.0f, 1.0f), $"  Alt Job {sheetIdx}: {altTwinesForThisSheet}");
+                    }
+                    
+                    ImGui.EndTooltip();
+                }
             }
 
             ImGui.EndTable();
         }
-
-        ImGui.EndChild();
     }
 }
