@@ -267,7 +267,7 @@ public class MainWindow : Window, IDisposable
             
             // Left - Member section
             float memberSectionWidth = System.Math.Min(memberTableWidth - 10, 350);
-            if (ImGui.BeginChild("IndividualMemberSection", new System.Numerics.Vector2(memberSectionWidth, 530), true))
+            if (ImGui.BeginChild("IndividualMemberSection", new System.Numerics.Vector2(memberSectionWidth, 590), true))
             {
                 // Sheet name - editable with delete button
                 if (!individualSheetRenameInput.ContainsKey(individualTabSelectedSheetIndex))
@@ -497,7 +497,7 @@ public class MainWindow : Window, IDisposable
                 
                 ImGui.Spacing();
                 
-                DrawCurrencyTableForIndividualMember(member, currentSheet);
+                DrawCurrencyTableForIndividualMember(member, currentSheet, individualTabFloor1Clears, individualTabFloor2Clears, individualTabFloor3Clears, individualTabFloor4Clears);
                 
                 ImGui.Spacing();
                 
@@ -859,7 +859,7 @@ public class MainWindow : Window, IDisposable
                 columnCount++;
             
             if (ImGui.BeginChild($"Section_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", 
-                new Vector2(columnCount * 355 + (columnCount - 1) * 5, 590), false))
+                new Vector2(columnCount * 355 + (columnCount - 1) * 5, 600), false))
             {
                 ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(5, 5));
                 ImGui.Columns(columnCount, $"SectionColumns_{rowIdx}_{string.Join("_", rowMembers.Select(m => team.Members.IndexOf(m)))}", false);
@@ -928,7 +928,7 @@ public class MainWindow : Window, IDisposable
         var member = team.Members[memberIdx];
         
         // Constrain to a max width and height
-        if (ImGui.BeginChild($"MemberSection{memberIdx}", new System.Numerics.Vector2(350, 570), true))
+        if (ImGui.BeginChild($"MemberSection{memberIdx}", new System.Numerics.Vector2(350, 600), true))
         {
             // Member name - editable
             string name = member.Name;
@@ -1261,6 +1261,38 @@ public class MainWindow : Window, IDisposable
             // Header row
             ImGui.TableHeadersRow();
 
+            // Spent Books row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Spent Books");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                int pagesFromClears = GetBooksFromClears(team, floor);
+                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int totalBooksAvailable = pagesFromClears + pageAdjustment;
+                
+                int spentBooks = member.SpentBooks.ContainsKey(floor) ? member.SpentBooks[floor] : 0;
+                int oldSpentBooks = spentBooks;
+                
+                ImGui.SetNextItemWidth(35);
+                if (ImGui.InputInt($"##SpentBooks{memberIdx}_{floor}", ref spentBooks))
+                {
+                    // Validation: value must be >= 0 and <= total books available
+                    if (spentBooks < 0)
+                    {
+                        spentBooks = 0;
+                    }
+                    else if (spentBooks > totalBooksAvailable)
+                    {
+                        spentBooks = totalBooksAvailable;
+                    }
+                    
+                    member.SpentBooks[floor] = spentBooks;
+                    plugin.Configuration.Save();
+                }
+            }
+
             // Books row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
@@ -1269,9 +1301,54 @@ public class MainWindow : Window, IDisposable
             {
                 ImGui.TableSetColumnIndex(floor);
                 int pagesFromClears = GetBooksFromClears(team, floor);
-                int pageAdjustment = team.BookAdjustments.ContainsKey(floor) ? team.BookAdjustments[floor] : 0;
-                int totalBooks = pagesFromClears + pageAdjustment;
-                ImGui.Text(totalBooks.ToString());
+                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int totalBooksAvailable = pagesFromClears + pageAdjustment;
+                
+                // Initialize Books if not set
+                if (!member.BookAdjustments.ContainsKey(floor))
+                    member.BookAdjustments[floor] = 0;
+                
+                // Books is calculated from available books minus spent books
+                int spentBooks = member.SpentBooks.ContainsKey(floor) ? member.SpentBooks[floor] : 0;
+                int currentBooks = totalBooksAvailable - spentBooks;
+                int newBooks = currentBooks;
+                
+                ImGui.SetNextItemWidth(35);
+                if (ImGui.InputInt($"##Books{memberIdx}_{floor}", ref newBooks))
+                {
+                    // Validation: value must be >= 0 and <= total available
+                    if (newBooks < 0)
+                    {
+                        newBooks = 0;
+                    }
+                    else if (newBooks > totalBooksAvailable)
+                    {
+                        newBooks = totalBooksAvailable;
+                    }
+                    
+                    // Calculate the difference and update SpentBooks inversely
+                    int difference = currentBooks - newBooks;
+                    spentBooks += difference;
+                    member.SpentBooks[floor] = spentBooks;
+                    
+                    plugin.Configuration.Save();
+                }
+            }
+
+            // Book Adjust row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Book Adjust");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                ImGui.SetNextItemWidth(35);
+                int adjustValue = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                if (ImGui.InputInt($"##BookAdjust{memberIdx}_{floor}", ref adjustValue))
+                {
+                    member.BookAdjustments[floor] = adjustValue;
+                    plugin.Configuration.Save();
+                }
             }
 
             // Books Needed row
@@ -1283,26 +1360,10 @@ public class MainWindow : Window, IDisposable
                 ImGui.TableSetColumnIndex(floor);
                 int pagesNeeded = CalculateBooksNeededForFloor(member, floor);
                 int pagesFromClears = GetBooksFromClears(team, floor);
-                int pageAdjustment = team.BookAdjustments.ContainsKey(floor) ? team.BookAdjustments[floor] : 0;
+                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
                 int totalBooks = pagesFromClears + pageAdjustment;
                 int remainingBooks = Math.Max(0, pagesNeeded - totalBooks);
                 ImGui.Text(remainingBooks.ToString());
-            }
-
-            // Book Adjust row
-            ImGui.TableNextRow();
-            ImGui.TableSetColumnIndex(0);
-            ImGui.Text("Book Adjust");
-            for (int floor = 1; floor <= 4; floor++)
-            {
-                ImGui.TableSetColumnIndex(floor);
-                ImGui.SetNextItemWidth(35);
-                int adjustValue = team.BookAdjustments.ContainsKey(floor) ? team.BookAdjustments[floor] : 0;
-                if (ImGui.InputInt($"##BookAdjust{memberIdx}_{floor}", ref adjustValue))
-                {
-                    team.BookAdjustments[floor] = adjustValue;
-                    plugin.Configuration.Save();
-                }
             }
 
             ImGui.EndTable();
@@ -1856,7 +1917,7 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    private void DrawCurrencyTableForIndividualMember(Models.RaidMember member, Models.GearSheet sheet)
+    private void DrawCurrencyTableForIndividualMember(Models.RaidMember member, Models.GearSheet sheet, int floor1Clears, int floor2Clears, int floor3Clears, int floor4Clears)
     {
         if (ImGui.BeginTable("IndividualCurrencyTable", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
         {
@@ -1870,6 +1931,46 @@ public class MainWindow : Window, IDisposable
             // Header row
             ImGui.TableHeadersRow();
 
+            // Spent Books row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Spent Books");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                int floorClears = floor switch
+                {
+                    1 => floor1Clears,
+                    2 => floor2Clears,
+                    3 => floor3Clears,
+                    4 => floor4Clears,
+                    _ => 0
+                };
+                
+                int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                int totalBooksAvailable = member.BooksEarned + floorClears + pageAdjustment;
+                
+                int spentBooks = member.SpentBooks.ContainsKey(floor) ? member.SpentBooks[floor] : 0;
+                int oldSpentBooks = spentBooks;
+                
+                ImGui.SetNextItemWidth(35);
+                if (ImGui.InputInt($"##IndividualSpentBooks_{floor}", ref spentBooks))
+                {
+                    // Validation: value must be >= 0 and <= total books available
+                    if (spentBooks < 0)
+                    {
+                        spentBooks = 0;
+                    }
+                    else if (spentBooks > totalBooksAvailable)
+                    {
+                        spentBooks = totalBooksAvailable;
+                    }
+                    
+                    member.SpentBooks[floor] = spentBooks;
+                    plugin.Configuration.Save();
+                }
+            }
+
             // Books row
             ImGui.TableNextRow();
             ImGui.TableSetColumnIndex(0);
@@ -1877,15 +1978,59 @@ public class MainWindow : Window, IDisposable
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
-                int floorClears = 0;
-                if (floor == 1) floorClears = sheet.Floor1Clears;
-                else if (floor == 2) floorClears = sheet.Floor2Clears;
-                else if (floor == 3) floorClears = sheet.Floor3Clears;
-                else if (floor == 4) floorClears = sheet.Floor4Clears;
+                int floorClears = floor switch
+                {
+                    1 => floor1Clears,
+                    2 => floor2Clears,
+                    3 => floor3Clears,
+                    4 => floor4Clears,
+                    _ => 0
+                };
                 
                 int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
-                int totalBooks = member.BooksEarned + floorClears + pageAdjustment;
-                ImGui.Text(totalBooks.ToString());
+                int totalBooksAvailable = member.BooksEarned + floorClears + pageAdjustment;
+                
+                // Books is calculated from available books minus spent books
+                int spentBooks = member.SpentBooks.ContainsKey(floor) ? member.SpentBooks[floor] : 0;
+                int currentBooks = totalBooksAvailable - spentBooks;
+                int newBooks = currentBooks;
+                
+                ImGui.SetNextItemWidth(35);
+                if (ImGui.InputInt($"##IndividualBooks_{floor}", ref newBooks))
+                {
+                    // Validation: value must be >= 0 and <= total available
+                    if (newBooks < 0)
+                    {
+                        newBooks = 0;
+                    }
+                    else if (newBooks > totalBooksAvailable)
+                    {
+                        newBooks = totalBooksAvailable;
+                    }
+                    
+                    // Calculate the difference and update SpentBooks inversely
+                    int difference = currentBooks - newBooks;
+                    spentBooks += difference;
+                    member.SpentBooks[floor] = spentBooks;
+                    
+                    plugin.Configuration.Save();
+                }
+            }
+
+            // Book Adjust row
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text("Book Adjust");
+            for (int floor = 1; floor <= 4; floor++)
+            {
+                ImGui.TableSetColumnIndex(floor);
+                ImGui.SetNextItemWidth(35);
+                int adjustValue = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
+                if (ImGui.InputInt($"##IndividualBookAdjust_{floor}", ref adjustValue))
+                {
+                    member.BookAdjustments[floor] = adjustValue;
+                    plugin.Configuration.Save();
+                }
             }
 
             // Books Needed row
@@ -1895,11 +2040,14 @@ public class MainWindow : Window, IDisposable
             for (int floor = 1; floor <= 4; floor++)
             {
                 ImGui.TableSetColumnIndex(floor);
-                int floorClears = 0;
-                if (floor == 1) floorClears = sheet.Floor1Clears;
-                else if (floor == 2) floorClears = sheet.Floor2Clears;
-                else if (floor == 3) floorClears = sheet.Floor3Clears;
-                else if (floor == 4) floorClears = sheet.Floor4Clears;
+                int floorClears = floor switch
+                {
+                    1 => floor1Clears,
+                    2 => floor2Clears,
+                    3 => floor3Clears,
+                    4 => floor4Clears,
+                    _ => 0
+                };
                 
                 int pagesNeeded = CalculateBooksNeededForFloor(member, floor);
                 int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
@@ -2589,7 +2737,7 @@ public class MainWindow : Window, IDisposable
                     // Main sheet pages needed
                     int pagesNeeded = CalculateBooksNeededForFloor(member, floor);
                     int pagesFromClears = GetBooksFromClears(team, floor);
-                    int pageAdjustment = team.BookAdjustments.ContainsKey(floor) ? team.BookAdjustments[floor] : 0;
+                    int pageAdjustment = member.BookAdjustments.ContainsKey(floor) ? member.BookAdjustments[floor] : 0;
                     int totalBooks = pagesFromClears + pageAdjustment;
                     int remainingBooks = Math.Max(0, pagesNeeded - totalBooks);
                     
