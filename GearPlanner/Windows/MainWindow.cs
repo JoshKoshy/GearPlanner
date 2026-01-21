@@ -21,8 +21,8 @@ public class MainWindow : Window, IDisposable
     private readonly string[] jobOptions = Helpers.FFXIVJobs.GetAllJobOptions();
     private Dictionary<int, string> memberXivGearUrlInput = new(); // Store URL input per member
     private Dictionary<int, int> memberBiSSetIndex = new(); // Store selected BiS set index per member
-    private int selectedTab = 1; // 0=Individual, 1=Team, 2=Loot Planner, 3=Who Needs it?, 4=Legend
-    private readonly string[] tabNames = { "Individual", "Team", "Loot Planner", "Who Needs it?", "Legend" };
+    private int selectedTab = 1; // 0=Individual, 1=Team, 2=Loot Planner, 3=Who Needs it?, 4=Legend, 5=Calculate Loot Distribution
+    private readonly string[] tabNames = { "Individual", "Team", "Loot Planner", "Who Needs it?", "Legend", "Calculate Loot Distribution" };
     private List<Models.GearSheet> individualTabSheets = new(); // Sheets for Individual tab
     private int individualTabSelectedSheetIndex = 0;
     private Dictionary<int, string> individualSheetRenameInput = new(); // Store rename input per sheet
@@ -36,6 +36,11 @@ public class MainWindow : Window, IDisposable
     private int individualTabFloor2Clears = 0;
     private int individualTabFloor3Clears = 0;
     private int individualTabFloor4Clears = 0;
+    
+    // Calculate Loot Distribution tab state
+    private int calculateLootDistributionTeamIndex = 0;
+    private List<string> lootDistributionPlan = new();
+    private bool hasGeneratedPlan = false;
 
     public MainWindow(Plugin plugin)
         : base("Gear Planner##MainWindow")
@@ -117,6 +122,10 @@ public class MainWindow : Window, IDisposable
 
             case 4: // Legend tab
                 DrawLegendForIndividualTab();
+                break;
+
+            case 5: // Calculate Loot Distribution tab
+                DrawCalculateLootDistributionTab();
                 break;
         }
     }
@@ -2232,6 +2241,86 @@ public class MainWindow : Window, IDisposable
         ImGui.PopStyleColor();
     }
 
+    private void DrawCalculateLootDistributionTab()
+    {
+        if (plugin.Configuration.RaidTeams.Count == 0)
+        {
+            ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.0f, 1.0f), "No raid teams configured.");
+            ImGui.Text("Use /gp config to create a team or edit the sample team.");
+            return;
+        }
+
+        ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Calculate Loot Distribution");
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // Team selection dropdown
+        var teamNames = plugin.Configuration.RaidTeams.Select(t => t.Name).ToList();
+        if (calculateLootDistributionTeamIndex >= teamNames.Count)
+            calculateLootDistributionTeamIndex = 0;
+
+        ImGui.Text("Select Team:");
+        ImGui.SameLine();
+        if (ImGui.BeginCombo("##LootDistTeamCombo", teamNames[calculateLootDistributionTeamIndex]))
+        {
+            for (int i = 0; i < teamNames.Count; i++)
+            {
+                if (ImGui.Selectable(teamNames[i], i == calculateLootDistributionTeamIndex))
+                {
+                    calculateLootDistributionTeamIndex = i;
+                    hasGeneratedPlan = false;
+                    lootDistributionPlan.Clear();
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.Spacing();
+
+        if (ImGui.Button("Generate Plan", new Vector2(150, 0)))
+        {
+            var selectedTeam = plugin.Configuration.RaidTeams[calculateLootDistributionTeamIndex];
+            lootDistributionPlan = GenerateLootDistributionPlan(selectedTeam);
+            hasGeneratedPlan = true;
+        }
+
+        ImGui.SameLine();
+
+        if (ImGui.Button("Generate Plan off present state", new Vector2(220, 0)))
+        {
+            int currentTeamIndex = plugin.Configuration.SelectedTeamIndex;
+            if (currentTeamIndex >= 0 && currentTeamIndex < plugin.Configuration.RaidTeams.Count)
+            {
+                var currentTeam = plugin.Configuration.RaidTeams[currentTeamIndex];
+                lootDistributionPlan = GenerateLootDistributionPlan(currentTeam);
+                hasGeneratedPlan = true;
+            }
+            else
+            {
+                lootDistributionPlan.Clear();
+                lootDistributionPlan.Add("Error: No valid team is currently selected in the Team tab.");
+                hasGeneratedPlan = true;
+            }
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        if (hasGeneratedPlan && lootDistributionPlan.Count > 0)
+        {
+            ImGui.TextColored(new Vector4(0.0f, 1.0f, 1.0f, 1.0f), "Distribution Plan:");
+            ImGui.Spacing();
+
+            // Combine plan lines into a single string for display and copying
+            string planText = string.Join("\n", lootDistributionPlan);
+            ImGui.InputTextMultiline("##LootDistributionPlanContent", ref planText, 65536, new Vector2(0, -30), ImGuiInputTextFlags.ReadOnly);
+        }
+        else if (hasGeneratedPlan)
+        {
+            ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.0f, 1.0f), "Unable to generate plan. Please check your team configuration.");
+        }
+    }
+
     private void DrawLootPlannerTab() //test12
     {
         if (plugin.Configuration.RaidTeams.Count == 0)
@@ -2965,5 +3054,650 @@ public class MainWindow : Window, IDisposable
 
             ImGui.EndTable();
         }
+    }
+
+    private List<string> GenerateLootDistributionPlan(Models.RaidTeam team)
+    {
+        var plan = new List<string>();
+
+        // Validate team
+        if (team.Members.Count == 0 || team.Sheets.Count == 0)
+        {
+            plan.Add("Error: Team must have at least one member and one sheet.");
+            return plan;
+        }
+
+        plan.Add($"Loot Distribution Plan for Team: {team.Name}");
+        plan.Add($"Team Members: {team.Members.Count}");
+        plan.Add($"Sheets: {string.Join(", ", team.Sheets.Select(s => s.Name))}");
+        plan.Add("");
+        plan.Add("=== DISTRIBUTION RULES ===");
+        plan.Add("Weekly Resources Per Floor:");
+        plan.Add("  - Floor 1: 1 Book + 1 Ear, 1 Neck, 1 Wrist, 1 Ring");
+        plan.Add("  - Floor 2: 1 Book + 1 Head, 1 Hands, 1 Feet");
+        plan.Add("  - Floor 3: 1 Book + 1 Chest, 1 Leg");
+        plan.Add("  - Floor 4: 1 Book + 1 Weapon");
+        plan.Add("");
+        plan.Add("Book Exchange Rates:");
+        plan.Add("  - 3 Floor 1 Books → Ear/Neck/Wrist/Ring (Savage)");
+        plan.Add("  - 4 Floor 2 Books → Head/Hands/Feet (Savage)");
+        plan.Add("  - 6 Floor 3 Books → Chest/Leg (Savage)");
+        plan.Add("  - 8 Floor 4 Books → Weapon (Savage)");
+        plan.Add("  - 3 Floor 2 Books → Glaze (upgrade Tome to Tome Up)");
+        plan.Add("  - 4 Floor 3 Books → Twine (upgrade Tome to Tome Up)");
+        plan.Add("  - 1 Floor 4 Book → Any other floor's book (conversion)");
+        plan.Add("");
+        plan.Add("=== LOOT NEEDS ANALYSIS ===");
+        plan.Add("");
+
+        // Build member needs list
+        var memberNeeds = new List<MemberLootNeeds>();
+        
+        for (int sheetIdx = 0; sheetIdx < team.Sheets.Count; sheetIdx++)
+        {
+            var sheet = team.Sheets[sheetIdx];
+            
+            for (int memberIdx = 0; memberIdx < sheet.Members.Count && memberIdx < team.Members.Count; memberIdx++)
+            {
+                var sheetMember = sheet.Members[memberIdx];
+                var teamMember = team.Members[memberIdx];
+                
+                var needs = new MemberLootNeeds
+                {
+                    MemberName = teamMember.Name,
+                    Job = sheetMember.Job,
+                    SheetName = sheet.Name,
+                    SheetIndex = sheetIdx,
+                    MemberIndex = memberIdx,
+                    SavagePieces = CountSavageGearsNeeded(sheetMember),
+                    GlazesNeeded = CountGlazesNeeded(sheetMember),
+                    TwinesNeeded = CountTwinesNeeded(sheetMember)
+                };
+                
+                memberNeeds.Add(needs);
+            }
+        }
+
+        // Filter out members who need nothing
+        var membersWithNeeds = memberNeeds.Where(m => m.TotalItemsNeeded > 0).ToList();
+
+        if (membersWithNeeds.Count == 0)
+        {
+            plan.Add("=== RESULT ===");
+            plan.Add("All team members are fully geared! No loot distribution needed.");
+            return plan;
+        }
+
+        plan.Add("=== LOOT NEEDS ANALYSIS ===");
+        plan.Add("");
+
+        foreach (var needs in memberNeeds)
+        {
+            if (needs.TotalItemsNeeded > 0)
+            {
+                plan.Add($"{needs.MemberName} ({needs.Job}) - {needs.SheetName}:");
+                plan.Add($"  Savage Pieces Needed: {needs.SavagePieces}");
+                plan.Add($"  Glazes Needed: {needs.GlazesNeeded}");
+                plan.Add($"  Twines Needed: {needs.TwinesNeeded}");
+                plan.Add("");
+            }
+        }
+
+        // Calculate week-by-week distribution
+        var weekPlans = CalculateWeekByWeekDistribution(memberNeeds, team.Members.Count);
+
+        plan.Add("=== WEEK BY WEEK DISTRIBUTION PLAN ===");
+        plan.Add("");
+
+        for (int week = 0; week < weekPlans.Count; week++)
+        {
+            var weekPlan = weekPlans[week];
+            plan.Add($"WEEK {week + 1}:");
+            plan.Add($"  Books Earned: Floor1={weekPlan.Floor1Books} Floor2={weekPlan.Floor2Books} Floor3={weekPlan.Floor3Books} Floor4={weekPlan.Floor4Books}");
+            plan.Add($"  Book Totals: Floor1={weekPlan.CumulativeFloor1} Floor2={weekPlan.CumulativeFloor2} Floor3={weekPlan.CumulativeFloor3} Floor4={weekPlan.CumulativeFloor4}");
+            plan.Add("");
+
+            if (weekPlan.Distributions.Count > 0)
+            {
+                plan.Add("  Distributions:");
+                foreach (var dist in weekPlan.Distributions)
+                {
+                    plan.Add($"    - {dist}");
+                }
+            }
+            else
+            {
+                plan.Add("  (Accumulating books for future distributions)");
+            }
+
+            plan.Add("");
+        }
+
+        plan.Add("=== SUMMARY ===");
+        plan.Add($"Total Weeks Needed: {weekPlans.Count}");
+        if (weekPlans.Count > 0)
+        {
+            var lastWeek = weekPlans.Last();
+            plan.Add($"Final Week Books: Floor1={lastWeek.CumulativeFloor1} Floor2={lastWeek.CumulativeFloor2} Floor3={lastWeek.CumulativeFloor3} Floor4={lastWeek.CumulativeFloor4}");
+        }
+
+        return plan;
+    }
+
+    private int CountSavageGearsNeeded(Models.RaidMember member)
+    {
+        int count = 0;
+        foreach (var piece in member.Gear.Values)
+        {
+            if (piece.DesiredSource == Models.GearSource.Savage && piece.Source != Models.GearSource.Savage)
+                count++;
+        }
+        return count;
+    }
+
+    private int CountGlazesNeeded(Models.RaidMember member)
+    {
+        // Glazes are for Ears, Neck, Wrists, Rings that are Tome and need to be Tome Up
+        int count = 0;
+        var glazeSlots = new[] { "Ears", "Neck", "Wrists", "Ring1", "Ring2" };
+        
+        foreach (var slotName in glazeSlots)
+        {
+            if (member.Gear.TryGetValue(slotName, out var piece))
+            {
+                if (piece.DesiredSource == Models.GearSource.TomeUp && piece.Source != Models.GearSource.TomeUp)
+                    count++;
+            }
+        }
+        return count;
+    }
+
+    private int CountTwinesNeeded(Models.RaidMember member)
+    {
+        // Twines are for Head, Chest, Hands, Legs, Feet that are Tome and need to be Tome Up
+        int count = 0;
+        var twineSlots = new[] { "Head", "Body", "Hands", "Legs", "Feet" };
+        
+        foreach (var slotName in twineSlots)
+        {
+            if (member.Gear.TryGetValue(slotName, out var piece))
+            {
+                if (piece.DesiredSource == Models.GearSource.TomeUp && piece.Source != Models.GearSource.TomeUp)
+                    count++;
+            }
+        }
+        return count;
+    }
+
+    private List<WeeklyDistribution> CalculateWeekByWeekDistribution(List<MemberLootNeeds> memberNeeds, int teamMemberCount)
+    {
+        var weeks = new List<WeeklyDistribution>();
+        
+        // Track what each member still needs and their personal book pools
+        var memberStates = memberNeeds.ToDictionary(m => (m.SheetIndex, m.MemberIndex), m => 
+            new MemberState 
+            { 
+                SavagePiecesRemaining = m.SavagePieces,
+                GlazesRemaining = m.GlazesNeeded,
+                TwinesRemaining = m.TwinesNeeded,
+                Name = m.MemberName,
+                Job = m.Job,
+                SheetName = m.SheetName,
+                Floor1Books = 0,
+                Floor2Books = 0,
+                Floor3Books = 0,
+                Floor4Books = 0,
+                SlotsNeeded = new HashSet<string> { "MainHand", "Body", "Legs", "Head", "Hands", "Feet", "Ears", "Neck", "Wrists", "Ring1" }
+            });
+
+        // Direct upgrades available (Glazes from Floor 2, Twines from Floor 3)
+        int availableGlazes = 0;
+        int availableTwines = 0;
+        
+        // Direct gear drops available each week to assign
+        var availableDrops = new Dictionary<string, int>
+        {
+            { "Ears", 0 },
+            { "Neck", 0 },
+            { "Wrists", 0 },
+            { "Ring1", 0 },
+            { "Ring2", 0 },
+            { "Head", 0 },
+            { "Hands", 0 },
+            { "Feet", 0 },
+            { "Body", 0 },
+            { "Legs", 0 },
+            { "MainHand", 0 }
+        };
+
+        // Maximum 52 weeks to prevent infinite loops
+        for (int week = 0; week < 52; week++)
+        {
+            var weekPlan = new WeeklyDistribution
+            {
+                Week = week + 1,
+                Floor1Books = 1,
+                Floor2Books = 1,
+                Floor3Books = 1,
+                Floor4Books = 1
+            };
+
+            // Determine which floors to clear based on specific slot needs
+            // Floor 1 provides: Ears, Neck, Wrists, Ring (Savage only)
+            bool needFloor1 = memberStates.Values.Any(s => s.SavagePiecesRemaining > 0 && 
+                (s.SlotsNeeded.Contains("Ears") || s.SlotsNeeded.Contains("Neck") || 
+                 s.SlotsNeeded.Contains("Wrists") || s.SlotsNeeded.Contains("Ring1")));
+            
+            // Floor 2 provides: Head, Hands, Feet (Savage) + Glazes
+            bool needFloor2 = (memberStates.Values.Any(s => s.SavagePiecesRemaining > 0 && 
+                (s.SlotsNeeded.Contains("Head") || s.SlotsNeeded.Contains("Hands") || 
+                 s.SlotsNeeded.Contains("Feet")))) || 
+                memberStates.Values.Any(s => s.GlazesRemaining > 0);
+            
+            // Floor 3 provides: Chest, Legs (Savage) + Twines
+            bool needFloor3 = (memberStates.Values.Any(s => s.SavagePiecesRemaining > 0 && 
+                (s.SlotsNeeded.Contains("Body") || s.SlotsNeeded.Contains("Legs")))) || 
+                memberStates.Values.Any(s => s.TwinesRemaining > 0);
+            
+            // Floor 4 provides: Weapon (Savage) + can trade to any other floor's book (1:1)
+            // Clear if someone needs a weapon
+            bool needFloor4Weapon = memberStates.Values.Any(s => s.SavagePiecesRemaining > 0 && 
+                s.SlotsNeeded.Contains("MainHand"));
+            
+            // Check if Floor 4 books would be needed for trading (this week OR future weeks)
+            bool needFloor4ForTrades = false;
+            if (!needFloor4Weapon)
+            {
+                // Two-phase deficit analysis: calculate exact remaining needs and available resources
+                
+                // Phase 1: Calculate EXACT total remaining needs across all members
+                int totalSavagePiecesNeeded = memberStates.Values.Sum(m => m.SavagePiecesRemaining);
+                int totalGlazesNeeded = memberStates.Values.Sum(m => m.GlazesRemaining);
+                int totalTwinesNeeded = memberStates.Values.Sum(m => m.TwinesRemaining);
+                
+                // Phase 2: Calculate EXACT book costs by category
+                int savageFloor1Cost = 0, savageFloor2Cost = 0, savageFloor3Cost = 0;
+                
+                foreach (var member in memberStates.Values)
+                {
+                    if (member.SavagePiecesRemaining > 0)
+                    {
+                        // Count pieces needed per category
+                        int earsNeckWristsRings = (member.SlotsNeeded.Contains("Ears") ? 1 : 0) +
+                                                 (member.SlotsNeeded.Contains("Neck") ? 1 : 0) +
+                                                 (member.SlotsNeeded.Contains("Wrists") ? 1 : 0) +
+                                                 (member.SlotsNeeded.Contains("Ring1") ? 1 : 0);
+                        
+                        int headHandsFeet = (member.SlotsNeeded.Contains("Head") ? 1 : 0) +
+                                          (member.SlotsNeeded.Contains("Hands") ? 1 : 0) +
+                                          (member.SlotsNeeded.Contains("Feet") ? 1 : 0);
+                        
+                        int chestLegs = (member.SlotsNeeded.Contains("Body") ? 1 : 0) +
+                                       (member.SlotsNeeded.Contains("Legs") ? 1 : 0);
+                        
+                        savageFloor1Cost += earsNeckWristsRings * 3;
+                        savageFloor2Cost += headHandsFeet * 4;
+                        savageFloor3Cost += chestLegs * 6;
+                    }
+                }
+                
+                // Book costs for upgrades (conservative: assume won't get all drops)
+                int glazeFloor2Cost = totalGlazesNeeded * 3;
+                int twineFloor3Cost = totalTwinesNeeded * 4;
+                
+                // Phase 3: Calculate current accumulated books
+                int currentFloor1 = memberStates.Values.Sum(m => m.Floor1Books);
+                int currentFloor2 = memberStates.Values.Sum(m => m.Floor2Books);
+                int currentFloor3 = memberStates.Values.Sum(m => m.Floor3Books);
+                
+                // Phase 4: Estimate future books from remaining non-weapon floors
+                // Heuristic: assume ~3-4 more weeks needed based on remaining pieces
+                int remainingWeeksEstimate = Math.Max(3, (totalSavagePiecesNeeded / 6) + 1);
+                
+                int futureFloor1 = (needFloor1 ? 1 : 0) + (remainingWeeksEstimate * 1);
+                int futureFloor2 = (needFloor2 ? 1 : 0) + (remainingWeeksEstimate * 1);
+                int futureFloor3 = (needFloor3 ? 1 : 0) + (remainingWeeksEstimate * 1);
+                
+                int totalFloor1Available = currentFloor1 + futureFloor1;
+                int totalFloor2Available = currentFloor2 + futureFloor2;
+                int totalFloor3Available = currentFloor3 + futureFloor3;
+                
+                // Phase 5: Check for deficits requiring Floor 4 trades
+                int floor2Deficit = Math.Max(0, (savageFloor2Cost + glazeFloor2Cost) - totalFloor2Available);
+                int floor3Deficit = Math.Max(0, (savageFloor3Cost + twineFloor3Cost) - totalFloor3Available);
+                int floor1Deficit = Math.Max(0, savageFloor1Cost - totalFloor1Available);
+                
+                if (floor1Deficit > 0 || floor2Deficit > 0 || floor3Deficit > 0)
+                {
+                    needFloor4ForTrades = true;
+                }
+            }
+            
+            bool needFloor4 = needFloor4Weapon || needFloor4ForTrades;
+
+            // Build the floors to clear message
+            var floorsToComplete = new List<string>();
+            if (needFloor1) floorsToComplete.Add("Floor 1");
+            if (needFloor2) floorsToComplete.Add("Floor 2");
+            if (needFloor3) floorsToComplete.Add("Floor 3");
+            if (needFloor4) floorsToComplete.Add("Floor 4");
+
+            // If no floors needed, we're done
+            if (floorsToComplete.Count == 0)
+                break;
+
+            weekPlan.Distributions.Add($"COMPLETE THIS WEEK: {string.Join(", ", floorsToComplete)}");
+            weekPlan.Distributions.Add("");
+
+            // Distribute this week's books to all members who participated
+            var participatingMembers = memberStates.Values.ToList();
+            if (participatingMembers.Count > 0)
+            {
+                if (needFloor1)
+                {
+                    foreach (var member in participatingMembers)
+                        member.Floor1Books++;
+                }
+                if (needFloor2)
+                {
+                    foreach (var member in participatingMembers)
+                        member.Floor2Books++;
+                }
+                if (needFloor3)
+                {
+                    foreach (var member in participatingMembers)
+                        member.Floor3Books++;
+                }
+                if (needFloor4)
+                {
+                    foreach (var member in participatingMembers)
+                        member.Floor4Books++;
+                }
+            }
+
+            // Add this week's direct drops to available pool (only from floors we're clearing)
+            if (needFloor1)
+            {
+                availableDrops["Ears"]++;
+                availableDrops["Neck"]++;
+                availableDrops["Wrists"]++;
+                availableDrops["Ring1"]++;
+            }
+            
+            if (needFloor2)
+            {
+                availableDrops["Head"]++;
+                availableDrops["Hands"]++;
+                availableDrops["Feet"]++;
+                availableGlazes += 1;
+            }
+            
+            if (needFloor3)
+            {
+                availableDrops["Body"]++;
+                availableDrops["Legs"]++;
+                availableTwines += 1;
+            }
+            
+            if (needFloor4)
+            {
+                availableDrops["MainHand"]++;
+            }
+
+            weekPlan.Distributions.Add($"Resources Available: Ears={availableDrops["Ears"]} Neck={availableDrops["Neck"]} Wrists={availableDrops["Wrists"]} Head={availableDrops["Head"]} Hands={availableDrops["Hands"]} Feet={availableDrops["Feet"]} Chest={availableDrops["Body"]} Legs={availableDrops["Legs"]} Weapon={availableDrops["MainHand"]} | Glazes={availableGlazes} Twines={availableTwines}");
+            weekPlan.Distributions.Add("");
+
+            // Assign direct drops to members who need them (prioritize main job, then by member index)
+            foreach (var kvp in memberStates.OrderBy(s => s.Key.SheetIndex).ThenBy(s => s.Key.MemberIndex))
+            {
+                var key = kvp.Key;
+                var state = kvp.Value;
+
+                if (state.SavagePiecesRemaining == 0)
+                    continue;
+
+                // Assign drops to whoever needs them, prioritizing in order
+                var slotsToTry = new[] { "MainHand", "Body", "Legs", "Head", "Hands", "Feet", "Ears", "Neck", "Wrists", "Ring1" };
+                
+                foreach (var slot in slotsToTry)
+                {
+                    if (availableDrops[slot] > 0 && state.SavagePiecesRemaining > 0 && state.SlotsNeeded.Contains(slot))
+                    {
+                        availableDrops[slot]--;
+                        state.SlotsNeeded.Remove(slot);
+                        state.SavagePiecesRemaining--;
+                        string displaySlot = slot == "MainHand" ? "Main Hand" : slot;
+                        weekPlan.Distributions.Add($"{state.Name} ({state.Job}): RECEIVES {displaySlot} (Savage) from direct drop");
+                        break; // One piece per member per week
+                    }
+                }
+            }
+
+            // Assign direct Glazes to members who need them
+            foreach (var kvp in memberStates.Where(s => s.Value.GlazesRemaining > 0).OrderBy(s => s.Key.SheetIndex))
+            {
+                var state = kvp.Value;
+                if (availableGlazes > 0 && state.GlazesRemaining > 0)
+                {
+                    availableGlazes--;
+                    state.GlazesRemaining--;
+                    weekPlan.Distributions.Add($"{state.Name} ({state.Job}): RECEIVES Glaze from direct drop");
+                }
+            }
+
+            // Assign direct Twines to members who need them
+            foreach (var kvp in memberStates.Where(s => s.Value.TwinesRemaining > 0).OrderBy(s => s.Key.SheetIndex))
+            {
+                var state = kvp.Value;
+                if (availableTwines > 0 && state.TwinesRemaining > 0)
+                {
+                    availableTwines--;
+                    state.TwinesRemaining--;
+                    weekPlan.Distributions.Add($"{state.Name} ({state.Job}): RECEIVES Twine from direct drop");
+                }
+            }
+
+            // Helper function to check if member has enough books with trade-down support
+            // 1 Floor 4 book = 1 of any other floor book (1:1 exchange)
+            Func<MemberState, int, int, (bool canAfford, int floor4Traded)> CanAffordItem = (member, floor, cost) =>
+            {
+                if (floor == 4)
+                {
+                    return (member.Floor4Books >= cost, 0);
+                }
+                else if (floor == 3)
+                {
+                    if (member.Floor3Books >= cost) return (true, 0);
+                    
+                    int still_needed = cost - member.Floor3Books;
+                    return (member.Floor4Books >= still_needed, still_needed);
+                }
+                else if (floor == 2)
+                {
+                    if (member.Floor2Books >= cost) return (true, 0);
+                    
+                    int still_needed = cost - member.Floor2Books;
+                    return (member.Floor4Books >= still_needed, still_needed);
+                }
+                else // floor == 1
+                {
+                    if (member.Floor1Books >= cost) return (true, 0);
+                    
+                    int still_needed = cost - member.Floor1Books;
+                    return (member.Floor4Books >= still_needed, still_needed);
+                }
+            };
+
+            // Helper function to spend books with trade-down
+            // 1 Floor 4 book = 1 of any other floor book (1:1 exchange)
+            Action<MemberState, int, int, string> SpendBooksForItem = (member, floor, cost, itemName) =>
+            {
+                if (floor == 4)
+                {
+                    member.Floor4Books -= cost;
+                    weekPlan.Distributions.Add($"{member.Name} ({member.Job}): BUYS {itemName} - SPENDS {cost} Floor 4 Books");
+                }
+                else if (floor == 3)
+                {
+                    int usedFloor3 = Math.Min(member.Floor3Books, cost);
+                    member.Floor3Books -= usedFloor3;
+                    int still_needed = cost - usedFloor3;
+                    member.Floor4Books -= still_needed;
+                    
+                    if (still_needed > 0)
+                        weekPlan.Distributions.Add($"{member.Name} ({member.Job}): BUYS {itemName} - SPENDS {still_needed} Floor 4 Books (TRADES for Floor 3 Books) and {usedFloor3} Floor 3 Books");
+                    else
+                        weekPlan.Distributions.Add($"{member.Name} ({member.Job}): BUYS {itemName} - SPENDS {cost} Floor 3 Books");
+                }
+                else if (floor == 2)
+                {
+                    int usedFloor2 = Math.Min(member.Floor2Books, cost);
+                    member.Floor2Books -= usedFloor2;
+                    int still_needed = cost - usedFloor2;
+                    member.Floor4Books -= still_needed;
+                    
+                    if (still_needed > 0)
+                        weekPlan.Distributions.Add($"{member.Name} ({member.Job}): BUYS {itemName} - SPENDS {still_needed} Floor 4 Books (TRADES for Floor 2 Books) and {usedFloor2} Floor 2 Books");
+                    else
+                        weekPlan.Distributions.Add($"{member.Name} ({member.Job}): BUYS {itemName} - SPENDS {cost} Floor 2 Books");
+                }
+                else // floor == 1
+                {
+                    int usedFloor1 = Math.Min(member.Floor1Books, cost);
+                    member.Floor1Books -= usedFloor1;
+                    int still_needed = cost - usedFloor1;
+                    member.Floor4Books -= still_needed;
+                    
+                    if (still_needed > 0)
+                        weekPlan.Distributions.Add($"{member.Name} ({member.Job}): BUYS {itemName} - SPENDS {still_needed} Floor 4 Books (TRADES for Floor 1 Books) and {usedFloor1} Floor 1 Books");
+                    else
+                        weekPlan.Distributions.Add($"{member.Name} ({member.Job}): BUYS {itemName} - SPENDS {cost} Floor 1 Books");
+                }
+            };
+
+            // Now use books to buy remaining gear
+            // Weapon = 8 Floor 4 Books, Chest/Leg = 6 Floor 3 Books, Head/Hands/Feet = 4 Floor 2 Books, Ear/Neck/Wrist/Ring = 3 Floor 1 Books
+            foreach (var kvp in memberStates.Where(s => s.Value.SavagePiecesRemaining > 0).OrderBy(s => s.Key.SheetIndex))
+            {
+                var state = kvp.Value;
+
+                // Try to buy in order of priority (weapons first)
+                if (state.SavagePiecesRemaining > 0)
+                {
+                    var (canAfford4, _) = CanAffordItem(state, 4, 8);
+                    if (canAfford4)
+                    {
+                        state.Floor4Books -= 8;
+                        state.SavagePiecesRemaining--;
+                        weekPlan.Distributions.Add($"{state.Name} ({state.Job}): BUYS Main Hand (Savage) - SPENDS 8 Floor 4 Books");
+                    }
+                    else
+                    {
+                        var (canAfford3, floor4Trades3) = CanAffordItem(state, 3, 6);
+                        if (canAfford3)
+                        {
+                            SpendBooksForItem(state, 3, 6, "Chest or Leg (Savage)");
+                            state.SavagePiecesRemaining--;
+                        }
+                        else
+                        {
+                            var (canAfford2, floor4Trades2) = CanAffordItem(state, 2, 4);
+                            if (canAfford2)
+                            {
+                                SpendBooksForItem(state, 2, 4, "Head, Hands, or Feet (Savage)");
+                                state.SavagePiecesRemaining--;
+                            }
+                            else
+                            {
+                                var (canAfford1, floor4Trades1) = CanAffordItem(state, 1, 3);
+                                if (canAfford1)
+                                {
+                                    SpendBooksForItem(state, 1, 3, "Ear, Neck, Wrist, or Ring (Savage)");
+                                    state.SavagePiecesRemaining--;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Use books to buy remaining Glazes
+            foreach (var kvp in memberStates.Where(s => s.Value.GlazesRemaining > 0).OrderBy(s => s.Key.SheetIndex))
+            {
+                var state = kvp.Value;
+                var (canAfford, floor4Trades) = CanAffordItem(state, 2, 3);
+                if (canAfford && state.GlazesRemaining > 0)
+                {
+                    SpendBooksForItem(state, 2, 3, "Glaze");
+                    state.GlazesRemaining--;
+                }
+            }
+
+            // Use books to buy remaining Twines
+            foreach (var kvp in memberStates.Where(s => s.Value.TwinesRemaining > 0).OrderBy(s => s.Key.SheetIndex))
+            {
+                var state = kvp.Value;
+                var (canAfford, floor4Trades) = CanAffordItem(state, 3, 4);
+                if (canAfford && state.TwinesRemaining > 0)
+                {
+                    SpendBooksForItem(state, 3, 4, "Twine");
+                    state.TwinesRemaining--;
+                }
+            }
+
+            weeks.Add(weekPlan);
+
+            // Check if all members are done
+            if (memberStates.Values.All(s => s.SavagePiecesRemaining == 0 && s.GlazesRemaining == 0 && s.TwinesRemaining == 0))
+            {
+                break;
+            }
+        }
+
+        return weeks;
+    }
+
+    private class MemberLootNeeds
+    {
+        public string MemberName { get; set; } = "";
+        public string Job { get; set; } = "";
+        public string SheetName { get; set; } = "";
+        public int SheetIndex { get; set; }
+        public int MemberIndex { get; set; }
+        public int SavagePieces { get; set; }
+        public int GlazesNeeded { get; set; }
+        public int TwinesNeeded { get; set; }
+        
+        public int TotalItemsNeeded => SavagePieces + GlazesNeeded + TwinesNeeded;
+    }
+
+    private class MemberState
+    {
+        public string Name { get; set; } = "";
+        public string Job { get; set; } = "";
+        public string SheetName { get; set; } = "";
+        public int SavagePiecesRemaining { get; set; }
+        public int GlazesRemaining { get; set; }
+        public int TwinesRemaining { get; set; }
+        public int Floor1Books { get; set; } = 0;
+        public int Floor2Books { get; set; } = 0;
+        public int Floor3Books { get; set; } = 0;
+        public int Floor4Books { get; set; } = 0;
+        // Track which slot types this member still needs
+        public HashSet<string> SlotsNeeded { get; set; } = new();
+    }
+
+    private class WeeklyDistribution
+    {
+        public int Week { get; set; }
+        public int Floor1Books { get; set; }
+        public int Floor2Books { get; set; }
+        public int Floor3Books { get; set; }
+        public int Floor4Books { get; set; }
+        public int CumulativeFloor1 { get; set; }
+        public int CumulativeFloor2 { get; set; }
+        public int CumulativeFloor3 { get; set; }
+        public int CumulativeFloor4 { get; set; }
+        public List<string> Distributions { get; set; } = new();
     }
 }
